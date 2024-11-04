@@ -512,10 +512,10 @@ fn generateMoves(board: *Board, moves: *MoveList) void {
                 const castle_k, const castle_q = castle_masks[@intFromEnum(board.active_color)];
                 const empty_k, const empty_q = castling_empty_masks[@intFromEnum(board.active_color)];
                 const rank: u8 = board.active_color.backRank();
-                if (castle_k & board.state.castle == 0 and board.bitboard[@intFromEnum(board.active_color)] & empty_k == 0) {
+                if (castle_k & board.state.castle == 0 and (board.bitboard[0] | board.bitboard[1]) & empty_k == 0) {
                     moves.addCastle(board.state, board.board[rank | 7].id, rank | 7, rank | 4, rank | 6);
                 }
-                if (castle_q & board.state.castle == 0 and board.bitboard[@intFromEnum(board.active_color)] & empty_q == 0) {
+                if (castle_q & board.state.castle == 0 and (board.bitboard[0] | board.bitboard[1]) & empty_q == 0) {
                     moves.addCastle(board.state, board.board[rank | 0].id, rank | 0, rank | 3, rank | 2);
                 }
             },
