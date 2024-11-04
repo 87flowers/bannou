@@ -524,7 +524,7 @@ fn generateMoves(board: *Board, moves: *MoveList) void {
             .b => generateSliderMoves(board, moves, .b, id, src, diag_dir),
             .n => generateStepperMoves(board, moves, .n, id, src, [_]u8{ 0xDF, 0xE1, 0xEE, 0x0E, 0xF2, 0x12, 0x1F, 0x21 }),
             .p => {
-                const invert: u8 = @as(u8, @bitCast(-@as(i8, @intFromEnum(board.active_color)))) & 0xF0;
+                const invert: u8 = @as(u8, @bitCast(-@as(i8, @intFromEnum(board.active_color)))) & 0x70;
                 const isrc = src ^ invert;
                 const onestep = (isrc + 0x10) ^ invert;
                 const twostep = (isrc + 0x20) ^ invert;
@@ -552,20 +552,29 @@ fn generateMoves(board: *Board, moves: *MoveList) void {
     }
 }
 
-pub fn main() !void {
-    var board = Board.defaultBoard();
-    board.debugPrint();
+pub fn perft(board: *Board, depth: usize) usize {
+    if (depth == 0) return 1;
+    var result: usize = 0;
     var moves = MoveList{};
-    generateMoves(&board, &moves);
+    generateMoves(board, &moves);
     for (0..moves.size) |i| {
         const m = moves.moves[i];
-        m.debugPrint();
-        std.debug.print("\n", .{});
+        const old_state = board.move(m);
+        // m.debugPrint();
+        // std.debug.print("\n", .{});
+        // board.debugPrint();
+        result += perft(board, depth - 1);
+        board.unmove(m, old_state);
     }
-    const old_state = board.move(moves.moves[0]);
-    board.debugPrint();
-    board.unmove(moves.moves[0], old_state);
-    board.debugPrint();
+    return result;
+}
+
+pub fn main() !void {
+    var board = Board.defaultBoard();
+    for (0..5) |i| {
+        const p = perft(&board, i);
+        std.debug.print("perft({}) = {}\n", .{i, p});
+    }
 }
 
 test "simple test" {}
