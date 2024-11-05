@@ -1,3 +1,11 @@
+const ParseError = error{
+    InvalidChar,
+    InvalidLength,
+    DuplicateKing,
+    TooManyPieces,
+    OutOfRange,
+};
+
 const PieceType = enum(u3) {
     none,
     k,
@@ -9,32 +17,49 @@ const PieceType = enum(u3) {
 
     pub fn toChar(self: PieceType, color: Color) u8 {
         return @as(u8, switch (self) {
-                .none => '.',
-                .k => switch (color) {
-                    .black => 'k',
-                    .white => 'K',
-                },
-                .q => switch (color) {
-                    .black => 'q',
-                    .white => 'Q',
-                },
-                .r => switch (color) {
-                    .black => 'r',
-                    .white => 'R',
-                },
-                .b => switch (color) {
-                    .black => 'b',
-                    .white => 'B',
-                },
-                .n => switch (color) {
-                    .black => 'n',
-                    .white => 'N',
-                },
-                .p => switch (color) {
-                    .black => 'p',
-                    .white => 'P',
-                },
-            });
+            .none => '.',
+            .k => switch (color) {
+                .black => 'k',
+                .white => 'K',
+            },
+            .q => switch (color) {
+                .black => 'q',
+                .white => 'Q',
+            },
+            .r => switch (color) {
+                .black => 'r',
+                .white => 'R',
+            },
+            .b => switch (color) {
+                .black => 'b',
+                .white => 'B',
+            },
+            .n => switch (color) {
+                .black => 'n',
+                .white => 'N',
+            },
+            .p => switch (color) {
+                .black => 'p',
+                .white => 'P',
+            },
+        });
+    }
+    pub fn parse(ch: u8) ParseError!struct { PieceType, Color } {
+        return switch (ch) {
+            'k' => .{ .k, .black },
+            'q' => .{ .q, .black },
+            'r' => .{ .r, .black },
+            'b' => .{ .b, .black },
+            'n' => .{ .n, .black },
+            'p' => .{ .p, .black },
+            'K' => .{ .k, .white },
+            'Q' => .{ .q, .white },
+            'R' => .{ .r, .white },
+            'B' => .{ .b, .white },
+            'N' => .{ .n, .white },
+            'P' => .{ .p, .white },
+            else => ParseError.InvalidChar,
+        };
     }
 };
 
@@ -46,6 +71,25 @@ const Color = enum(u1) {
     }
     pub fn backRank(self: Color) u8 {
         return @as(u8, @bitCast(-@as(i8, @intFromEnum(self)))) & 0x70;
+    }
+    pub fn idBase(self: Color) u5 {
+        return @as(u5, @intFromEnum(self)) << 4;
+    }
+    pub fn toChar(self: Color) u8 {
+        return switch (self) {
+            .white => 'w',
+            .black => 'b',
+        };
+    }
+    pub fn format(self: Color, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+        try writer.print("{c}", .{self.toChar()});
+    }
+    pub fn parse(ch: u8) ParseError!Color {
+        return switch (ch) {
+            'w' => .white,
+            'b' => .black,
+            else => ParseError.InvalidChar,
+        };
     }
 };
 
@@ -59,8 +103,8 @@ pub fn toIndex(id: u5) u1 {
 }
 
 const Place = packed struct {
-    ptype: PieceType,
     id: u5,
+    ptype: PieceType,
 };
 
 const empty_place = Place{
@@ -72,9 +116,41 @@ fn stringFromCoord(coord: u8) [2]u8 {
     return .{ 'a' + (coord & 0xF), '1' + (coord >> 4) };
 }
 
+fn coordFromString(str: [2]u8) ParseError!u8 {
+    if (str[0] < 'a' or str[0] > 'h') return ParseError.InvalidChar;
+    if (str[1] < '1' or str[1] > '8') return ParseError.InvalidChar;
+    return (str[0] - 'a') + ((str[1] - '1') << 4);
+}
+
+test stringFromCoord {
+    for (0..256) |i| {
+        const coord: u8 = @truncate(i);
+        if (isValidCoord(coord)) {
+            try std.testing.expectEqual(coord, try coordFromString(stringFromCoord(coord)));
+        }
+    }
+}
+
+fn compressCoord(coord: u8) u6 {
+    assert(isValidCoord(coord));
+    return @truncate((coord + (coord & 7)) >> 1);
+}
+
+fn uncompressCoord(comp: u6) u8 {
+    return @as(u8, comp & 0b111000) + @as(u8, comp);
+}
+
+test compressCoord {
+    for (0..256) |i| {
+        const coord: u8 = @truncate(i);
+        if (isValidCoord(coord)) {
+            try std.testing.expectEqual(coord, uncompressCoord(compressCoord(coord)));
+        }
+    }
+}
+
 fn bitFromCoord(coord: u8) u64 {
-    const i = (coord + (coord & 7)) >> 1;
-    return @as(u64, 1) << @truncate(i);
+    return @as(u64, 1) << compressCoord(coord);
 }
 
 fn isValidCoord(coord: u8) bool {
@@ -105,6 +181,84 @@ const State = struct {
     no_capture_clock: u8,
     /// current move number (in half-moves)
     ply: u16,
+
+    pub fn format(self: State, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+        // castling state
+        var hasCastle = false;
+        if (self.castle & wk_castle_mask == 0) {
+            try writer.print("K", .{});
+            hasCastle = true;
+        }
+        if (self.castle & wq_castle_mask == 0) {
+            try writer.print("Q", .{});
+            hasCastle = true;
+        }
+        if (self.castle & bk_castle_mask == 0) {
+            try writer.print("k", .{});
+            hasCastle = true;
+        }
+        if (self.castle & bq_castle_mask == 0) {
+            try writer.print("q", .{});
+            hasCastle = true;
+        }
+        if (!hasCastle) try writer.print("-", .{});
+        if (isValidCoord(self.enpassant)) {
+            try writer.print(" {s}\n", .{stringFromCoord(self.enpassant)});
+        } else {
+            try writer.print(" -\n", .{});
+        }
+        // move counts
+        try writer.print("{} {}\n", .{ self.no_capture_clock, self.ply >> 1 });
+    }
+    pub fn parse(str: []const u8, active_color: Color) !State {
+        var result: State = .{
+            .castle = ~@as(u64, 0),
+            .enpassant = 0xFF,
+            .no_capture_clock = undefined,
+            .ply = undefined,
+        };
+        var i: usize = 0;
+        if (i >= str.len) return ParseError.InvalidLength;
+        if (str[i] == ' ') return ParseError.InvalidChar;
+        if (str[i] != '-') {
+            while (i < str.len and str[i] != ' ') : (i += 1) {
+                switch (str[i]) {
+                    'K', 'A' => result.castle &= ~wk_castle_mask,
+                    'Q', 'H' => result.castle &= ~wq_castle_mask,
+                    'k', 'a' => result.castle &= ~bk_castle_mask,
+                    'q', 'h' => result.castle &= ~bq_castle_mask,
+                    else => return ParseError.InvalidChar,
+                }
+            }
+        }
+        if (i >= str.len) return ParseError.InvalidLength;
+        if (str[i] != ' ') return ParseError.InvalidChar;
+        i += 1;
+        if (i >= str.len) return ParseError.InvalidLength;
+        if (str[i] == '-') {
+            i += 1;
+        } else {
+            if (i + 2 >= str.len) return ParseError.InvalidLength;
+            result.enpassant = try coordFromString(str[i..][0..2].*);
+            i += 2;
+        }
+        if (i >= str.len) return ParseError.InvalidLength;
+        if (str[i] != ' ') return ParseError.InvalidChar;
+        i += 1;
+        var j = i;
+        while (j < str.len and str[j] != ' ') j += 1;
+        if (i == j) return ParseError.InvalidChar;
+        if (j >= str.len) return ParseError.InvalidLength;
+        result.no_capture_clock = try std.fmt.parseUnsigned(u8, str[i..j], 10);
+        if (result.no_capture_clock > 200) return ParseError.OutOfRange;
+        if (str[j] != ' ') return ParseError.InvalidChar;
+        j += 1;
+        if (i >= str.len) return ParseError.InvalidLength;
+        result.ply = try std.fmt.parseUnsigned(u16, str[j..], 10);
+        if (result.ply > 10000) return ParseError.OutOfRange;
+        result.ply = result.ply * 2 + @intFromEnum(active_color);
+        return result;
+    }
 };
 
 const MoveType = enum {
@@ -112,7 +266,52 @@ const MoveType = enum {
     castle,
 };
 
+const MoveCode = struct {
+    code: u16,
+    pub fn src(self: MoveCode) u8 {
+        return uncompressCoord(@truncate(self.code >> 9));
+    }
+    pub fn dest(self: MoveCode) u8 {
+        return uncompressCoord(@truncate(self.code >> 3));
+    }
+    pub fn make(src_ptype: PieceType, src_coord: u8, dest_ptype: PieceType, dest_coord: u8) MoveCode {
+        return .{
+            .code = @as(u16, compressCoord(src_coord)) << 9 |
+                @as(u16, compressCoord(dest_coord)) << 3 |
+                if (src_ptype != dest_ptype) @as(u16, @intFromEnum(dest_ptype)) else 0,
+        };
+    }
+    pub fn format(self: MoveCode, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+        const ptype: PieceType = @enumFromInt(self.code & 7);
+        try writer.print("{c}{c}{c}{c}", .{
+            'a' + @as(u8, @truncate(self.code >> 9 & 7)),
+            '1' + @as(u8, @truncate(self.code >> 12 & 7)),
+            'a' + @as(u8, @truncate(self.code >> 3 & 7)),
+            '1' + @as(u8, @truncate(self.code >> 6 & 7)),
+        });
+        if (ptype != .none) try writer.print("{c}", .{ptype.toChar(.black)});
+    }
+    pub fn parse(str: []const u8) ParseError!MoveCode {
+        var result: u16 = 0;
+        if (str.len < 4 or str.len > 5) return ParseError.InvalidLength;
+        if (str[0] < 'a' or str[0] > 'h') return ParseError.InvalidChar;
+        result |= @as(u16, str[0] - 'a') << 9;
+        if (str[1] < '1' or str[1] > '8') return ParseError.InvalidChar;
+        result |= @as(u16, str[1] - '1') << 12;
+        if (str[2] < 'a' or str[2] > 'h') return ParseError.InvalidChar;
+        result |= @as(u16, str[2] - 'a') << 3;
+        if (str[3] < '1' or str[3] > '8') return ParseError.InvalidChar;
+        result |= @as(u16, str[3] - '1') << 6;
+        if (str.len > 4) {
+            const ptype = try PieceType.parse(str[4]);
+            result |= @intFromEnum(ptype);
+        }
+        return .{ .code = result };
+    }
+};
+
 const Move = struct {
+    code: MoveCode,
     id: u5,
     src_coord: u8,
     src_ptype: PieceType,
@@ -123,15 +322,8 @@ const Move = struct {
     state: State,
     mtype: MoveType,
 
-    pub fn debugPrint(self: Move) void {
-        switch (self.mtype) {
-            .normal => if (self.dest_ptype != self.src_ptype) {
-                std.debug.print("{s}{s}{c}", .{stringFromCoord(self.src_coord), stringFromCoord(self.dest_coord), self.dest_ptype.toChar(.black)});
-            } else {
-                std.debug.print("{s}{s}", .{stringFromCoord(self.src_coord), stringFromCoord(self.dest_coord)});
-            },
-            .castle => std.debug.print("{s}{s}", .{stringFromCoord(getColor(self.id).backRank() | 4), stringFromCoord(self.capture_coord)}),
-        }
+    pub fn format(self: Move, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+        try writer.print("{}", .{self.code});
     }
 };
 
@@ -141,6 +333,7 @@ const MoveList = struct {
 
     pub fn add(self: *MoveList, state: State, ptype: PieceType, id: u5, src: u8, dest: u8) void {
         self.moves[self.size] = .{
+            .code = MoveCode.make(ptype, src, ptype, dest),
             .id = id,
             .src_coord = src,
             .src_ptype = ptype,
@@ -161,6 +354,7 @@ const MoveList = struct {
 
     pub fn addPawnOne(self: *MoveList, state: State, ptype: PieceType, id: u5, src: u8, dest: u8, capture_place: Place) void {
         self.moves[self.size] = .{
+            .code = MoveCode.make(ptype, src, ptype, dest),
             .id = id,
             .src_coord = src,
             .src_ptype = ptype,
@@ -181,6 +375,7 @@ const MoveList = struct {
 
     pub fn addPawnTwo(self: *MoveList, state: State, ptype: PieceType, id: u5, src: u8, dest: u8, enpassant: u8) void {
         self.moves[self.size] = .{
+            .code = MoveCode.make(ptype, src, ptype, dest),
             .id = id,
             .src_coord = src,
             .src_ptype = ptype,
@@ -199,17 +394,18 @@ const MoveList = struct {
         self.size += 1;
     }
 
-    pub fn addPawnPromotion(self: *MoveList, state: State, ptype: PieceType, id: u5, src: u8, dest: u8, capture_place: Place, dest_ptype: PieceType) void {
+    pub fn addPawnPromotion(self: *MoveList, state: State, src_ptype: PieceType, id: u5, src: u8, dest: u8, capture_place: Place, dest_ptype: PieceType) void {
         self.moves[self.size] = .{
+            .code = MoveCode.make(src_ptype, src, dest_ptype, dest),
             .id = id,
             .src_coord = src,
-            .src_ptype = ptype,
+            .src_ptype = src_ptype,
             .dest_coord = dest,
             .dest_ptype = dest_ptype,
             .capture_coord = dest,
             .capture_place = capture_place,
             .state = .{
-                .castle = state.castle,
+                .castle = state.castle | bitFromCoord(dest),
                 .enpassant = 0xFF,
                 .no_capture_clock = 0,
                 .ply = state.ply + 1,
@@ -221,6 +417,7 @@ const MoveList = struct {
 
     pub fn addCapture(self: *MoveList, state: State, ptype: PieceType, id: u5, src: u8, dest: u8, capture_place: Place) void {
         self.moves[self.size] = .{
+            .code = MoveCode.make(ptype, src, ptype, dest),
             .id = id,
             .src_coord = src,
             .src_ptype = ptype,
@@ -229,7 +426,7 @@ const MoveList = struct {
             .capture_coord = dest,
             .capture_place = capture_place,
             .state = .{
-                .castle = state.castle | bitFromCoord(src),
+                .castle = state.castle | bitFromCoord(src) | bitFromCoord(dest),
                 .enpassant = 0xFF,
                 .no_capture_clock = 0,
                 .ply = state.ply + 1,
@@ -242,6 +439,7 @@ const MoveList = struct {
     pub fn addEnpassant(self: *MoveList, state: State, ptype: PieceType, id: u5, src: u8, capture_coord: u8, capture_place: Place) void {
         assert(isValidCoord(state.enpassant));
         self.moves[self.size] = .{
+            .code = MoveCode.make(ptype, src, ptype, state.enpassant),
             .id = id,
             .src_coord = src,
             .src_ptype = ptype,
@@ -260,19 +458,20 @@ const MoveList = struct {
         self.size += 1;
     }
 
-    pub fn addCastle(self: *MoveList, state: State, rook_id: u5, src_rook: u8, dest_rook: u8, dest_king: u8) void {
+    pub fn addCastle(self: *MoveList, state: State, rook_id: u5, src_rook: u8, dest_rook: u8, src_king: u8, dest_king: u8) void {
         self.moves[self.size] = .{
+            .code = MoveCode.make(.k, src_king, .k, dest_king),
             .id = rook_id,
             .src_coord = src_rook,
             .src_ptype = .r,
             .dest_coord = dest_rook,
             .dest_ptype = .r,
-            .capture_coord = dest_king,
+            .capture_coord = dest_rook,
             .capture_place = empty_place,
             .state = .{
-                .castle = state.castle | bitFromCoord(src_rook) | bitFromCoord(getColor(rook_id).backRank() | 4),
+                .castle = state.castle | bitFromCoord(src_rook) | bitFromCoord(src_king),
                 .enpassant = 0xFF,
-                .no_capture_clock = 0,
+                .no_capture_clock = state.no_capture_clock + 1,
                 .ply = state.ply + 1,
             },
             .mtype = .castle,
@@ -343,7 +542,7 @@ const Board = struct {
     }
 
     fn place(self: *Board, id: u5, ptype: PieceType, coord: u8) void {
-        assert(self.board[coord].ptype == .none and self.pieces[id] == .none);
+        assert(self.board[coord] == empty_place and self.pieces[id] == .none);
         self.pieces[id] = ptype;
         self.where[id] = coord;
         self.board[coord] = Place{ .ptype = ptype, .id = id };
@@ -355,10 +554,13 @@ const Board = struct {
         switch (m.mtype) {
             .normal => {
                 if (m.capture_place != empty_place) {
+                    assert(self.pieces[m.capture_place.id] == m.capture_place.ptype);
+                    assert(self.board[m.capture_coord] == m.capture_place);
                     self.pieces[m.capture_place.id] = .none;
                     self.board[m.capture_coord] = empty_place;
                     self.bitboard[~toIndex(m.id)] &= ~bitFromCoord(m.capture_coord);
                 }
+                assert(self.board[m.src_coord] == Place{ .ptype = m.src_ptype, .id = m.id });
                 self.board[m.src_coord] = empty_place;
                 self.board[m.dest_coord] = Place{ .ptype = m.dest_ptype, .id = m.id };
                 self.where[m.id] = m.dest_coord;
@@ -367,15 +569,14 @@ const Board = struct {
                 self.bitboard[toIndex(m.id)] |= bitFromCoord(m.dest_coord);
             },
             .castle => {
-                const king_coord = getColor(m.id).backRank() | 4;
-                self.board[king_coord] = empty_place;
+                self.board[m.code.src()] = empty_place;
                 self.board[m.src_coord] = empty_place;
-                self.board[m.capture_coord] = Place{ .ptype = .k, .id = m.id & 0x10 };
-                self.board[m.dest_coord] = Place{ .ptype = m.dest_ptype, .id = m.id };
-                self.where[m.id & 0x10] = m.capture_coord;
+                self.board[m.code.dest()] = Place{ .ptype = .k, .id = m.id & 0x10 };
+                self.board[m.dest_coord] = Place{ .ptype = .r, .id = m.id };
+                self.where[m.id & 0x10] = m.code.dest();
                 self.where[m.id] = m.dest_coord;
-                self.bitboard[toIndex(m.id)] &= ~(bitFromCoord(m.src_coord) | bitFromCoord(king_coord));
-                self.bitboard[toIndex(m.id)] |= bitFromCoord(m.dest_coord) | bitFromCoord(m.capture_coord);
+                self.bitboard[toIndex(m.id)] &= ~(bitFromCoord(m.src_coord) | bitFromCoord(m.code.src()));
+                self.bitboard[toIndex(m.id)] |= bitFromCoord(m.dest_coord) | bitFromCoord(m.code.dest());
             },
         }
         self.state = m.state;
@@ -386,12 +587,12 @@ const Board = struct {
     fn unmove(self: *Board, m: Move, old_state: State) void {
         switch (m.mtype) {
             .normal => {
+                self.board[m.dest_coord] = empty_place;
                 if (m.capture_place != empty_place) {
                     self.pieces[m.capture_place.id] = m.capture_place.ptype;
                     self.board[m.capture_coord] = m.capture_place;
                     self.bitboard[~toIndex(m.id)] |= bitFromCoord(m.capture_coord);
                 }
-                self.board[m.dest_coord] = empty_place;
                 self.board[m.src_coord] = Place{ .ptype = m.src_ptype, .id = m.id };
                 self.where[m.id] = m.src_coord;
                 self.pieces[m.id] = m.src_ptype;
@@ -399,63 +600,90 @@ const Board = struct {
                 self.bitboard[toIndex(m.id)] |= bitFromCoord(m.src_coord);
             },
             .castle => {
-                const king_coord = getColor(m.id).backRank() | 4;
-                self.board[king_coord] = Place{ .ptype = .k, .id = m.id & 0x10 };
-                self.board[m.src_coord] = Place{ .ptype = m.src_ptype, .id = m.id };
-                self.board[m.capture_coord] = empty_place;
+                self.board[m.code.dest()] = empty_place;
                 self.board[m.dest_coord] = empty_place;
-                self.where[m.id & 0x10] = king_coord;
+                self.board[m.code.src()] = Place{ .ptype = .k, .id = m.id & 0x10 };
+                self.board[m.src_coord] = Place{ .ptype = .r, .id = m.id };
+                self.where[m.id & 0x10] = m.code.src();
                 self.where[m.id] = m.src_coord;
-                self.bitboard[toIndex(m.id)] &= ~(bitFromCoord(m.dest_coord) | bitFromCoord(m.capture_coord));
-                self.bitboard[toIndex(m.id)] |= bitFromCoord(m.src_coord) | bitFromCoord(king_coord);
+                self.bitboard[toIndex(m.id)] &= ~(bitFromCoord(m.dest_coord) | bitFromCoord(m.code.dest()));
+                self.bitboard[toIndex(m.id)] |= bitFromCoord(m.src_coord) | bitFromCoord(m.code.src());
             },
         }
         self.state = old_state;
         self.active_color = self.active_color.invert();
     }
 
-    fn debugPrint(self: *Board) void {
+    pub fn format(self: MoveCode, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+        var blanks: u32 = 0;
+        for (0..64) |i| {
+            const j = (i + (i & 0o70)) ^ 0x70;
+            const p = self.board[j];
+            if (p == empty_place) {
+                blanks += 1;
+            } else {
+                if (blanks != 0) {
+                    try writer.print("{}", .{blanks});
+                    blanks = 0;
+                }
+                try writer.print("{c}", .{p.ptype.toChar(getColor(p.id))});
+            }
+            if (i % 8 == 7) {
+                if (blanks != 0) {
+                    try writer.print("{}", .{blanks});
+                    blanks = 0;
+                }
+                try writer.print("/", .{});
+            }
+        }
+        try writer.print(" {} {}", .{ self.active_color, self.state });
+    }
+
+    pub fn parse(str: []const u8) !Board {
+        var result = Board.emptyBoard();
+        var coord: u8 = 0;
+        var id: [2]u8 = .{ 1, 1 };
+        var i: usize = 0;
+        while (coord < 64 and i < str.len) : (i += 1) {
+            const ch = str[i];
+            if (ch == '/') continue;
+            if (ch >= '1' and ch <= '8') {
+                coord += ch - '0';
+                continue;
+            }
+            const ptype, const color = try PieceType.parse(ch);
+            if (ptype == .k) {
+                if (result.pieces[color.idBase()] != .none) return ParseError.DuplicateKing;
+                result.place(color.idBase(), .k, uncompressCoord(@truncate(coord)) ^ 0x70);
+            } else {
+                if (id[@intFromEnum(color)] > 0xf) return ParseError.TooManyPieces;
+                const current_id: u5 = @truncate(color.idBase() + id[@intFromEnum(color)]);
+                result.place(current_id, ptype, uncompressCoord(@truncate(coord)) ^ 0x70);
+                id[@intFromEnum(color)] += 1;
+            }
+            coord += 1;
+        }
+        if (coord != 64 or i + 3 >= str.len) return ParseError.InvalidLength;
+        if (str[i + 0] != ' ') return ParseError.InvalidChar;
+        result.active_color = try Color.parse(str[i + 1]);
+        if (str[i + 2] != ' ') return ParseError.InvalidChar;
+        result.state = try State.parse(str[i + 3 ..], result.active_color);
+        return result;
+    }
+
+    fn debugPrint(self: *const Board) void {
         for (0..64) |i| {
             const j = (i + (i & 0o70)) ^ 0x70;
             const p = self.board[j];
             std.debug.print("{c}", .{p.ptype.toChar(getColor(p.id))});
             if (i % 8 == 7) std.debug.print("\n", .{});
         }
-        // active color
-        switch (self.active_color) {
-            .white => std.debug.print("w ", .{}),
-            .black => std.debug.print("b ", .{}),
-        }
-        // castling state
-        var hasCastle = false;
-        if (self.state.castle & wk_castle_mask == 0) {
-            std.debug.print("K", .{});
-            hasCastle = true;
-        }
-        if (self.state.castle & wq_castle_mask == 0) {
-            std.debug.print("Q", .{});
-            hasCastle = true;
-        }
-        if (self.state.castle & bk_castle_mask == 0) {
-            std.debug.print("k", .{});
-            hasCastle = true;
-        }
-        if (self.state.castle & bq_castle_mask == 0) {
-            std.debug.print("q", .{});
-            hasCastle = true;
-        }
-        if (!hasCastle) std.debug.print("-", .{});
-        if (isValidCoord(self.state.enpassant)) {
-            std.debug.print(" {s}\n", .{stringFromCoord(self.state.enpassant)});
-        } else {
-            std.debug.print(" -\n", .{});
-        }
-        // move counts
-        std.debug.print("{} {}\n", .{ self.state.no_capture_clock, self.state.ply });
+        std.debug.print(" {} {}", .{ self.active_color, self.state });
     }
 };
 
 fn generateSliderMoves(board: *Board, moves: *MoveList, ptype: PieceType, id: u5, src: u8, dirs: anytype) void {
+    assert(board.where[id] == src and board.board[src] == Place{ .ptype = ptype, .id = id });
     for (dirs) |dir| {
         var dest: u8 = src +% dir;
         while (isValidCoord(dest)) : (dest +%= dir) {
@@ -471,6 +699,7 @@ fn generateSliderMoves(board: *Board, moves: *MoveList, ptype: PieceType, id: u5
 }
 
 fn generateStepperMoves(board: *Board, moves: *MoveList, ptype: PieceType, id: u5, src: u8, dirs: anytype) void {
+    assert(board.where[id] == src and board.board[src] == Place{ .ptype = ptype, .id = id });
     for (dirs) |dir| {
         const dest = src +% dir;
         if (isValidCoord(dest)) {
@@ -484,6 +713,7 @@ fn generateStepperMoves(board: *Board, moves: *MoveList, ptype: PieceType, id: u
 }
 
 fn generatePawnMovesMayPromote(board: *Board, moves: *MoveList, isrc: u8, id: u5, src: u8, dest: u8) void {
+    assert(board.where[id] == src and board.board[src] == Place{ .ptype = .p, .id = id });
     if ((isrc & 0xF0) == 0x60) {
         // promotion
         moves.addPawnPromotion(board.state, .p, id, src, dest, board.board[dest], .q);
@@ -495,12 +725,23 @@ fn generatePawnMovesMayPromote(board: *Board, moves: *MoveList, isrc: u8, id: u5
     }
 }
 
-fn generateMoves(board: *Board, moves: *MoveList) void {
-    const diag_dir = [4]u8{ 0xEF, 0xF1, 0x0F, 0x11 };
-    const ortho_dir = [4]u8{ 0xF0, 0xFF, 0x01, 0x10 };
-    const all_dir = diag_dir ++ ortho_dir;
+fn invertIfBlack(color: Color) u8 {
+    return @as(u8, @bitCast(-@as(i8, @intFromEnum(color)))) & 0x70;
+}
 
-    const id_base = @as(u5, @intFromEnum(board.active_color)) << 4;
+fn getPawnCaptures(color: Color, src: u8) [2]u8 {
+    const invert = invertIfBlack(color);
+    const isrc = src ^ invert;
+    return [2]u8{ (isrc + 0x0F) ^ invert, (isrc + 0x11) ^ invert };
+}
+
+const diag_dir = [4]u8{ 0xEF, 0xF1, 0x0F, 0x11 };
+const ortho_dir = [4]u8{ 0xF0, 0xFF, 0x01, 0x10 };
+const all_dir = diag_dir ++ ortho_dir;
+const knight_dir = [8]u8{ 0xDF, 0xE1, 0xEE, 0x0E, 0xF2, 0x12, 0x1F, 0x21 };
+
+fn generateMoves(board: *Board, moves: *MoveList) void {
+    const id_base = board.active_color.idBase();
     for (0..16) |id_index| {
         const id: u5 = @truncate(id_base + id_index);
         const src = board.where[id];
@@ -509,26 +750,34 @@ fn generateMoves(board: *Board, moves: *MoveList) void {
             .k => {
                 generateStepperMoves(board, moves, .k, id, src, all_dir);
 
-                const castle_k, const castle_q = castle_masks[@intFromEnum(board.active_color)];
-                const empty_k, const empty_q = castling_empty_masks[@intFromEnum(board.active_color)];
                 const rank: u8 = board.active_color.backRank();
-                if (castle_k & board.state.castle == 0 and (board.bitboard[0] | board.bitboard[1]) & empty_k == 0) {
-                    moves.addCastle(board.state, board.board[rank | 7].id, rank | 7, rank | 4, rank | 6);
-                }
-                if (castle_q & board.state.castle == 0 and (board.bitboard[0] | board.bitboard[1]) & empty_q == 0) {
-                    moves.addCastle(board.state, board.board[rank | 0].id, rank | 0, rank | 3, rank | 2);
+                if (board.where[id] == rank | 4) {
+                    const castle_k, const castle_q = castle_masks[@intFromEnum(board.active_color)];
+                    const empty_k, const empty_q = castling_empty_masks[@intFromEnum(board.active_color)];
+                    if (castle_k & board.state.castle == 0 and (board.bitboard[0] | board.bitboard[1]) & empty_k == 0) {
+                        if (!isAttacked(board, rank | 4, board.active_color) and !isAttacked(board, rank | 5, board.active_color) and !isAttacked(board, rank | 6, board.active_color)) {
+                            assert(board.board[rank | 7].ptype == .r and getColor(board.board[rank | 7].id) == board.active_color);
+                            moves.addCastle(board.state, board.board[rank | 7].id, rank | 7, rank | 4, rank | 4, rank | 6);
+                        }
+                    }
+                    if (castle_q & board.state.castle == 0 and (board.bitboard[0] | board.bitboard[1]) & empty_q == 0) {
+                        if (!isAttacked(board, rank | 2, board.active_color) and !isAttacked(board, rank | 3, board.active_color) and !isAttacked(board, rank | 4, board.active_color)) {
+                            assert(board.board[rank | 0].ptype == .r and getColor(board.board[rank | 0].id) == board.active_color);
+                            moves.addCastle(board.state, board.board[rank | 0].id, rank | 0, rank | 3, rank | 4, rank | 2);
+                        }
+                    }
                 }
             },
             .q => generateSliderMoves(board, moves, .q, id, src, all_dir),
             .r => generateSliderMoves(board, moves, .r, id, src, ortho_dir),
             .b => generateSliderMoves(board, moves, .b, id, src, diag_dir),
-            .n => generateStepperMoves(board, moves, .n, id, src, [_]u8{ 0xDF, 0xE1, 0xEE, 0x0E, 0xF2, 0x12, 0x1F, 0x21 }),
+            .n => generateStepperMoves(board, moves, .n, id, src, knight_dir),
             .p => {
-                const invert: u8 = @as(u8, @bitCast(-@as(i8, @intFromEnum(board.active_color)))) & 0x70;
+                const invert = invertIfBlack(board.active_color);
                 const isrc = src ^ invert;
                 const onestep = (isrc + 0x10) ^ invert;
                 const twostep = (isrc + 0x20) ^ invert;
-                const captures = [2]u8{ (isrc + 0x0F) ^ invert, (isrc + 0x11) ^ invert };
+                const captures = getPawnCaptures(board.active_color, src);
 
                 if ((isrc & 0xF0) == 0x10 and board.board[onestep].ptype == .none and board.board[twostep].ptype == .none) {
                     moves.addPawnTwo(board.state, .p, id, src, twostep, onestep);
@@ -552,6 +801,45 @@ fn generateMoves(board: *Board, moves: *MoveList) void {
     }
 }
 
+fn isVisibleBySlider(board: *Board, comptime dirs: anytype, src: u8, dest: u8) bool {
+    const lut = comptime blk: {
+        var l = [1]u8{0} ** 256;
+        for (dirs) |dir| {
+            for (1..8) |i| {
+                l[@as(u8, @truncate(dir *% i))] = dir;
+            }
+        }
+        break :blk l;
+    };
+    const vector = dest -% src;
+    const dir = lut[vector];
+    if (dir == 0) return false;
+    var t = src +% dir;
+    while (t != dest) : (t +%= dir)
+        if (board.board[t] != empty_place)
+            return false;
+    return true;
+}
+
+fn isAttacked(board: *Board, target: u8, friendly: Color) bool {
+    const enemy_color = friendly.invert();
+    const id_base = enemy_color.idBase();
+    for (0..16) |id_index| {
+        const id: u5 = @truncate(id_base + id_index);
+        const enemy = board.where[id];
+        switch (board.pieces[id]) {
+            .none => {},
+            .k => for (all_dir) |dir| if (target == enemy +% dir) return true,
+            .q => if (isVisibleBySlider(board, all_dir, enemy, target)) return true,
+            .r => if (isVisibleBySlider(board, ortho_dir, enemy, target)) return true,
+            .b => if (isVisibleBySlider(board, diag_dir, enemy, target)) return true,
+            .n => for (knight_dir) |dir| if (target == enemy +% dir) return true,
+            .p => for (getPawnCaptures(enemy_color, enemy)) |capture| if (target == capture) return true,
+        }
+    }
+    return false;
+}
+
 pub fn perft(board: *Board, depth: usize) usize {
     if (depth == 0) return 1;
     var result: usize = 0;
@@ -559,21 +847,45 @@ pub fn perft(board: *Board, depth: usize) usize {
     generateMoves(board, &moves);
     for (0..moves.size) |i| {
         const m = moves.moves[i];
+        const old_board = board.*;
         const old_state = board.move(m);
-        // m.debugPrint();
-        // std.debug.print("\n", .{});
-        // board.debugPrint();
-        result += perft(board, depth - 1);
+        if (!isAttacked(board, board.where[board.active_color.invert().idBase()], board.active_color.invert())) {
+            result += perft(board, depth - 1);
+        }
+        board.unmove(m, old_state);
+        if (!std.meta.eql(board.*, old_board)) {
+            board.debugPrint();
+            old_board.debugPrint();
+            @breakpoint();
+        }
+    }
+    return result;
+}
+
+pub fn divide(board: *Board, depth: usize) usize {
+    if (depth == 0) return 1;
+    var result: usize = 0;
+    var moves = MoveList{};
+    generateMoves(board, &moves);
+    for (0..moves.size) |i| {
+        const m = moves.moves[i];
+        const old_state = board.move(m);
+        if (!isAttacked(board, board.where[board.active_color.invert().idBase()], board.active_color.invert())) {
+            const p = perft(board, depth - 1);
+            result += p;
+            std.debug.print("{} = {}\n", .{ m, p });
+        }
         board.unmove(m, old_state);
     }
     return result;
 }
 
 pub fn main() !void {
-    var board = Board.defaultBoard();
-    for (0..5) |i| {
-        const p = perft(&board, i);
-        std.debug.print("perft({}) = {}\n", .{i, p});
+    var board = try Board.parse("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 0");
+    board.debugPrint();
+    for (0..6) |i| {
+        const p = divide(&board, i);
+        std.debug.print("perft({}) = {}\n", .{ i, p });
     }
 }
 
