@@ -223,10 +223,10 @@ const State = struct {
         if (str[i] != '-') {
             while (i < str.len and str[i] != ' ') : (i += 1) {
                 switch (str[i]) {
-                    'K', 'A' => result.castle &= ~wk_castle_mask,
-                    'Q', 'H' => result.castle &= ~wq_castle_mask,
-                    'k', 'a' => result.castle &= ~bk_castle_mask,
-                    'q', 'h' => result.castle &= ~bq_castle_mask,
+                    'K', 'H' => result.castle &= ~wk_castle_mask,
+                    'Q', 'A' => result.castle &= ~wq_castle_mask,
+                    'k', 'h' => result.castle &= ~bk_castle_mask,
+                    'q', 'a' => result.castle &= ~bq_castle_mask,
                     else => return ParseError.InvalidChar,
                 }
             }
