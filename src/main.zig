@@ -203,12 +203,12 @@ const State = struct {
         }
         if (!hasCastle) try writer.print("-", .{});
         if (isValidCoord(self.enpassant)) {
-            try writer.print(" {s}\n", .{stringFromCoord(self.enpassant)});
+            try writer.print(" {s} ", .{stringFromCoord(self.enpassant)});
         } else {
-            try writer.print(" -\n", .{});
+            try writer.print(" - ", .{});
         }
         // move counts
-        try writer.print("{} {}\n", .{ self.no_capture_clock, (self.ply >> 1) + 1 });
+        try writer.print("{} {}", .{ self.no_capture_clock, (self.ply >> 1) + 1 });
     }
     pub fn parseParts(active_color: Color, castle_str: []const u8, enpassant_str: []const u8, no_capture_clock_str: []const u8, ply_str: []const u8) !State {
         var result: State = .{
