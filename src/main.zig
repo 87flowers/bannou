@@ -46,18 +46,18 @@ const PieceType = enum(u3) {
     }
     pub fn parse(ch: u8) ParseError!struct { PieceType, Color } {
         return switch (ch) {
-            'k' => .{ .k, .black },
-            'q' => .{ .q, .black },
-            'r' => .{ .r, .black },
-            'b' => .{ .b, .black },
-            'n' => .{ .n, .black },
-            'p' => .{ .p, .black },
             'K' => .{ .k, .white },
+            'k' => .{ .k, .black },
             'Q' => .{ .q, .white },
+            'q' => .{ .q, .black },
             'R' => .{ .r, .white },
+            'r' => .{ .r, .black },
             'B' => .{ .b, .white },
+            'b' => .{ .b, .black },
             'N' => .{ .n, .white },
+            'n' => .{ .n, .black },
             'P' => .{ .p, .white },
+            'p' => .{ .p, .black },
             else => ParseError.InvalidChar,
         };
     }
@@ -210,19 +210,17 @@ const State = struct {
         // move counts
         try writer.print("{} {}\n", .{ self.no_capture_clock, self.ply >> 1 });
     }
-    pub fn parse(str: []const u8, active_color: Color) !State {
+    pub fn parseParts(active_color: Color, castle_str: []const u8, enpassant_str: []const u8, no_capture_clock_str: []const u8, ply_str: []const u8) !State {
         var result: State = .{
             .castle = ~@as(u64, 0),
             .enpassant = 0xFF,
             .no_capture_clock = undefined,
             .ply = undefined,
         };
-        var i: usize = 0;
-        if (i >= str.len) return ParseError.InvalidLength;
-        if (str[i] == ' ') return ParseError.InvalidChar;
-        if (str[i] != '-') {
-            while (i < str.len and str[i] != ' ') : (i += 1) {
-                switch (str[i]) {
+        if (!std.mem.eql(u8, castle_str, "-")) {
+            var i: usize = 0;
+            while (i < castle_str.len and castle_str[i] != ' ') : (i += 1) {
+                switch (castle_str[i]) {
                     'K', 'H' => result.castle &= ~wk_castle_mask,
                     'Q', 'A' => result.castle &= ~wq_castle_mask,
                     'k', 'h' => result.castle &= ~bk_castle_mask,
@@ -231,30 +229,13 @@ const State = struct {
                 }
             }
         }
-        if (i >= str.len) return ParseError.InvalidLength;
-        if (str[i] != ' ') return ParseError.InvalidChar;
-        i += 1;
-        if (i >= str.len) return ParseError.InvalidLength;
-        if (str[i] == '-') {
-            i += 1;
-        } else {
-            if (i + 2 >= str.len) return ParseError.InvalidLength;
-            result.enpassant = try coordFromString(str[i..][0..2].*);
-            i += 2;
+        if (!std.mem.eql(u8, enpassant_str, "-")) {
+            if (enpassant_str.len != 2) return ParseError.InvalidLength;
+            result.enpassant = try coordFromString(enpassant_str[0..2].*);
         }
-        if (i >= str.len) return ParseError.InvalidLength;
-        if (str[i] != ' ') return ParseError.InvalidChar;
-        i += 1;
-        var j = i;
-        while (j < str.len and str[j] != ' ') j += 1;
-        if (i == j) return ParseError.InvalidChar;
-        if (j >= str.len) return ParseError.InvalidLength;
-        result.no_capture_clock = try std.fmt.parseUnsigned(u8, str[i..j], 10);
+        result.no_capture_clock = try std.fmt.parseUnsigned(u8, no_capture_clock_str, 10);
         if (result.no_capture_clock > 200) return ParseError.OutOfRange;
-        if (str[j] != ' ') return ParseError.InvalidChar;
-        j += 1;
-        if (i >= str.len) return ParseError.InvalidLength;
-        result.ply = try std.fmt.parseUnsigned(u16, str[j..], 10);
+        result.ply = try std.fmt.parseUnsigned(u16, ply_str, 10);
         if (result.ply > 10000) return ParseError.OutOfRange;
         result.ply = result.ply * 2 + @intFromEnum(active_color);
         return result;
@@ -303,7 +284,7 @@ const MoveCode = struct {
         if (str[3] < '1' or str[3] > '8') return ParseError.InvalidChar;
         result |= @as(u16, str[3] - '1') << 6;
         if (str.len > 4) {
-            const ptype = try PieceType.parse(str[4]);
+            const ptype, _ = try PieceType.parse(str[4]);
             result |= @intFromEnum(ptype);
         }
         return .{ .code = result };
@@ -614,7 +595,7 @@ const Board = struct {
         self.active_color = self.active_color.invert();
     }
 
-    pub fn format(self: MoveCode, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+    pub fn format(self: Board, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
         var blanks: u32 = 0;
         for (0..64) |i| {
             const j = (i + (i & 0o70)) ^ 0x70;
@@ -639,35 +620,40 @@ const Board = struct {
         try writer.print(" {} {}", .{ self.active_color, self.state });
     }
 
-    pub fn parse(str: []const u8) !Board {
+    pub fn parseParts(board_str: []const u8, color_str: []const u8, castle_str: []const u8, enpassant_str: []const u8, no_capture_clock_str: []const u8, ply_str: []const u8) !Board {
         var result = Board.emptyBoard();
-        var coord: u8 = 0;
-        var id: [2]u8 = .{ 1, 1 };
-        var i: usize = 0;
-        while (coord < 64 and i < str.len) : (i += 1) {
-            const ch = str[i];
-            if (ch == '/') continue;
-            if (ch >= '1' and ch <= '8') {
-                coord += ch - '0';
-                continue;
+
+        {
+            var coord: u8 = 0;
+            var id: [2]u8 = .{ 1, 1 };
+            var i: usize = 0;
+            while (coord < 64 and i < board_str.len) : (i += 1) {
+                const ch = board_str[i];
+                if (ch == '/') continue;
+                if (ch >= '1' and ch <= '8') {
+                    coord += ch - '0';
+                    continue;
+                }
+                const ptype, const color = try PieceType.parse(ch);
+                if (ptype == .k) {
+                    if (result.pieces[color.idBase()] != .none) return ParseError.DuplicateKing;
+                    result.place(color.idBase(), .k, uncompressCoord(@truncate(coord)) ^ 0x70);
+                } else {
+                    if (id[@intFromEnum(color)] > 0xf) return ParseError.TooManyPieces;
+                    const current_id: u5 = @truncate(color.idBase() + id[@intFromEnum(color)]);
+                    result.place(current_id, ptype, uncompressCoord(@truncate(coord)) ^ 0x70);
+                    id[@intFromEnum(color)] += 1;
+                }
+                coord += 1;
             }
-            const ptype, const color = try PieceType.parse(ch);
-            if (ptype == .k) {
-                if (result.pieces[color.idBase()] != .none) return ParseError.DuplicateKing;
-                result.place(color.idBase(), .k, uncompressCoord(@truncate(coord)) ^ 0x70);
-            } else {
-                if (id[@intFromEnum(color)] > 0xf) return ParseError.TooManyPieces;
-                const current_id: u5 = @truncate(color.idBase() + id[@intFromEnum(color)]);
-                result.place(current_id, ptype, uncompressCoord(@truncate(coord)) ^ 0x70);
-                id[@intFromEnum(color)] += 1;
-            }
-            coord += 1;
+            if (coord != 64 or i != board_str.len) return ParseError.InvalidLength;
         }
-        if (coord != 64 or i + 3 >= str.len) return ParseError.InvalidLength;
-        if (str[i + 0] != ' ') return ParseError.InvalidChar;
-        result.active_color = try Color.parse(str[i + 1]);
-        if (str[i + 2] != ' ') return ParseError.InvalidChar;
-        result.state = try State.parse(str[i + 3 ..], result.active_color);
+
+        if (color_str.len != 1) return ParseError.InvalidLength;
+        result.active_color = try Color.parse(color_str[0]);
+
+        result.state = try State.parseParts(result.active_color, castle_str, enpassant_str, no_capture_clock_str, ply_str);
+
         return result;
     }
 
@@ -678,7 +664,7 @@ const Board = struct {
             std.debug.print("{c}", .{p.ptype.toChar(getColor(p.id))});
             if (i % 8 == 7) std.debug.print("\n", .{});
         }
-        std.debug.print(" {} {}", .{ self.active_color, self.state });
+        std.debug.print("{} {}\n", .{ self.active_color, self.state });
     }
 };
 
@@ -740,64 +726,83 @@ const ortho_dir = [4]u8{ 0xF0, 0xFF, 0x01, 0x10 };
 const all_dir = diag_dir ++ ortho_dir;
 const knight_dir = [8]u8{ 0xDF, 0xE1, 0xEE, 0x0E, 0xF2, 0x12, 0x1F, 0x21 };
 
+fn makeMoveByCode(board: *Board, code: MoveCode) bool {
+    const p = board.board[code.src()];
+    if (p == empty_place) return false;
+
+    var moves = MoveList{};
+    generateMovesForPiece(board, &moves, p.id);
+    for (moves.moves) |m| {
+        if (std.meta.eql(m.code, code)) {
+            _ = board.move(m);
+            return true;
+        }
+    }
+    return false;
+}
+
+fn generateMovesForPiece(board: *Board, moves: *MoveList, id: u5) void {
+    const src = board.where[id];
+    switch (board.pieces[id]) {
+        .none => {},
+        .k => {
+            generateStepperMoves(board, moves, .k, id, src, all_dir);
+
+            const rank: u8 = board.active_color.backRank();
+            if (board.where[id] == rank | 4) {
+                const castle_k, const castle_q = castle_masks[@intFromEnum(board.active_color)];
+                const empty_k, const empty_q = castling_empty_masks[@intFromEnum(board.active_color)];
+                if (castle_k & board.state.castle == 0 and (board.bitboard[0] | board.bitboard[1]) & empty_k == 0) {
+                    if (!isAttacked(board, rank | 4, board.active_color) and !isAttacked(board, rank | 5, board.active_color) and !isAttacked(board, rank | 6, board.active_color)) {
+                        assert(board.board[rank | 7].ptype == .r and getColor(board.board[rank | 7].id) == board.active_color);
+                        moves.addCastle(board.state, board.board[rank | 7].id, rank | 7, rank | 5, rank | 4, rank | 6);
+                    }
+                }
+                if (castle_q & board.state.castle == 0 and (board.bitboard[0] | board.bitboard[1]) & empty_q == 0) {
+                    if (!isAttacked(board, rank | 2, board.active_color) and !isAttacked(board, rank | 3, board.active_color) and !isAttacked(board, rank | 4, board.active_color)) {
+                        assert(board.board[rank | 0].ptype == .r and getColor(board.board[rank | 0].id) == board.active_color);
+                        moves.addCastle(board.state, board.board[rank | 0].id, rank | 0, rank | 3, rank | 4, rank | 2);
+                    }
+                }
+            }
+        },
+        .q => generateSliderMoves(board, moves, .q, id, src, all_dir),
+        .r => generateSliderMoves(board, moves, .r, id, src, ortho_dir),
+        .b => generateSliderMoves(board, moves, .b, id, src, diag_dir),
+        .n => generateStepperMoves(board, moves, .n, id, src, knight_dir),
+        .p => {
+            const invert = invertIfBlack(board.active_color);
+            const isrc = src ^ invert;
+            const onestep = (isrc + 0x10) ^ invert;
+            const twostep = (isrc + 0x20) ^ invert;
+            const captures = getPawnCaptures(board.active_color, src);
+
+            if ((isrc & 0xF0) == 0x10 and board.board[onestep].ptype == .none and board.board[twostep].ptype == .none) {
+                moves.addPawnTwo(board.state, .p, id, src, twostep, onestep);
+            }
+
+            for (captures) |capture| {
+                if (!isValidCoord(capture)) continue;
+                if (capture == board.state.enpassant) {
+                    const capture_coord = ((capture ^ invert) - 0x10) ^ invert;
+                    moves.addEnpassant(board.state, .p, id, src, capture_coord, board.board[capture_coord]);
+                } else if (board.board[capture].ptype != .none and getColor(board.board[capture].id) != board.active_color) {
+                    generatePawnMovesMayPromote(board, moves, isrc, id, src, capture);
+                }
+            }
+
+            if (board.board[onestep].ptype == .none) {
+                generatePawnMovesMayPromote(board, moves, isrc, id, src, onestep);
+            }
+        },
+    }
+}
+
 fn generateMoves(board: *Board, moves: *MoveList) void {
     const id_base = board.active_color.idBase();
     for (0..16) |id_index| {
         const id: u5 = @truncate(id_base + id_index);
-        const src = board.where[id];
-        switch (board.pieces[id]) {
-            .none => {},
-            .k => {
-                generateStepperMoves(board, moves, .k, id, src, all_dir);
-
-                const rank: u8 = board.active_color.backRank();
-                if (board.where[id] == rank | 4) {
-                    const castle_k, const castle_q = castle_masks[@intFromEnum(board.active_color)];
-                    const empty_k, const empty_q = castling_empty_masks[@intFromEnum(board.active_color)];
-                    if (castle_k & board.state.castle == 0 and (board.bitboard[0] | board.bitboard[1]) & empty_k == 0) {
-                        if (!isAttacked(board, rank | 4, board.active_color) and !isAttacked(board, rank | 5, board.active_color) and !isAttacked(board, rank | 6, board.active_color)) {
-                            assert(board.board[rank | 7].ptype == .r and getColor(board.board[rank | 7].id) == board.active_color);
-                            moves.addCastle(board.state, board.board[rank | 7].id, rank | 7, rank | 4, rank | 4, rank | 6);
-                        }
-                    }
-                    if (castle_q & board.state.castle == 0 and (board.bitboard[0] | board.bitboard[1]) & empty_q == 0) {
-                        if (!isAttacked(board, rank | 2, board.active_color) and !isAttacked(board, rank | 3, board.active_color) and !isAttacked(board, rank | 4, board.active_color)) {
-                            assert(board.board[rank | 0].ptype == .r and getColor(board.board[rank | 0].id) == board.active_color);
-                            moves.addCastle(board.state, board.board[rank | 0].id, rank | 0, rank | 3, rank | 4, rank | 2);
-                        }
-                    }
-                }
-            },
-            .q => generateSliderMoves(board, moves, .q, id, src, all_dir),
-            .r => generateSliderMoves(board, moves, .r, id, src, ortho_dir),
-            .b => generateSliderMoves(board, moves, .b, id, src, diag_dir),
-            .n => generateStepperMoves(board, moves, .n, id, src, knight_dir),
-            .p => {
-                const invert = invertIfBlack(board.active_color);
-                const isrc = src ^ invert;
-                const onestep = (isrc + 0x10) ^ invert;
-                const twostep = (isrc + 0x20) ^ invert;
-                const captures = getPawnCaptures(board.active_color, src);
-
-                if ((isrc & 0xF0) == 0x10 and board.board[onestep].ptype == .none and board.board[twostep].ptype == .none) {
-                    moves.addPawnTwo(board.state, .p, id, src, twostep, onestep);
-                }
-
-                for (captures) |capture| {
-                    if (!isValidCoord(capture)) continue;
-                    if (capture == board.state.enpassant) {
-                        const capture_coord = ((capture ^ invert) + 0x10) ^ invert;
-                        moves.addEnpassant(board.state, .p, id, src, capture_coord, board.board[capture_coord]);
-                    } else if (board.board[capture].ptype != .none and getColor(board.board[capture].id) != board.active_color) {
-                        generatePawnMovesMayPromote(board, moves, isrc, id, src, capture);
-                    }
-                }
-
-                if (board.board[onestep].ptype == .none) {
-                    generatePawnMovesMayPromote(board, moves, isrc, id, src, onestep);
-                }
-            },
-        }
+        generateMovesForPiece(board, moves, id);
     }
 }
 
@@ -862,8 +867,8 @@ pub fn perft(board: *Board, depth: usize) usize {
     return result;
 }
 
-pub fn divide(board: *Board, depth: usize) usize {
-    if (depth == 0) return 1;
+pub fn divide(output: anytype, board: *Board, depth: usize) !void {
+    if (depth == 0) return;
     var result: usize = 0;
     var moves = MoveList{};
     generateMoves(board, &moves);
@@ -873,19 +878,85 @@ pub fn divide(board: *Board, depth: usize) usize {
         if (!isAttacked(board, board.where[board.active_color.invert().idBase()], board.active_color.invert())) {
             const p = perft(board, depth - 1);
             result += p;
-            std.debug.print("{} = {}\n", .{ m, p });
+            try output.print("{}: {}\n", .{ m, p });
         }
         board.unmove(m, old_state);
     }
-    return result;
+    try output.print("Nodes searched (depth {}): {}\n", .{ depth, result });
 }
 
 pub fn main() !void {
-    var board = try Board.parse("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 0");
-    board.debugPrint();
-    for (0..6) |i| {
-        const p = divide(&board, i);
-        std.debug.print("perft({}) = {}\n", .{ i, p });
+    var input = std.io.getStdIn().reader();
+    var output = std.io.getStdOut().writer();
+
+    var board = Board.defaultBoard();
+
+    var buffer: [256]u8 = undefined;
+    while (try input.readUntilDelimiterOrEof(&buffer, '\n')) |line| {
+        var it = std.mem.tokenizeAny(u8, line, " \t\r\n");
+        if (it.next()) |command| {
+            if (std.mem.eql(u8, command, "quit")) {
+                return;
+            } else if (std.mem.eql(u8, command, "d")) {
+                board.debugPrint();
+            } else if (std.mem.eql(u8, command, "position")) {
+                const pos_type = it.next() orelse "startpos";
+                if (std.mem.eql(u8, pos_type, "startpos")) {
+                    board = Board.defaultBoard();
+                } else if (std.mem.eql(u8, pos_type, "fen")) {
+                    const board_str = it.next() orelse "";
+                    const color = it.next() orelse "";
+                    const castling = it.next() orelse "";
+                    const enpassant = it.next() orelse "";
+                    const no_capture_clock = it.next() orelse "";
+                    const ply = it.next() orelse "";
+                    board = Board.parseParts(board_str, color, castling, enpassant, no_capture_clock, ply) catch {
+                        try output.print("info string Error: Invalid FEN for position command\n", .{});
+                        continue;
+                    };
+                    if (it.next()) |moves_str| {
+                        if (!std.mem.eql(u8, moves_str, "moves")) {
+                            try output.print("info string Error: Unexpected token '{s}' in position command\n", .{moves_str});
+                            continue;
+                        }
+                        while (it.next()) |move_str| {
+                            const code = MoveCode.parse(move_str) catch {
+                                try output.print("info string Error: Invalid movecode '{s}'\n", .{move_str});
+                                break;
+                            };
+                            if (!makeMoveByCode(&board, code)) {
+                                try output.print("info string Error: Illegal move '{s}' in position {}\n", .{move_str, board});
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    try output.print("info string Error: Invalid position type '{s}' for position command\n", .{pos_type});
+                    continue;
+                }
+            } else if (std.mem.eql(u8, command, "l.move")) {
+                while (it.next()) |move_str| {
+                    const code = MoveCode.parse(move_str) catch {
+                        try output.print("info string Error: Invalid movecode '{s}'\n", .{move_str});
+                        break;
+                    };
+                    if (!makeMoveByCode(&board, code)) {
+                        try output.print("info string Error: Illegal move '{s}' in position {}\n", .{move_str, board});
+                        break;
+                    }
+                }
+            } else if (std.mem.eql(u8, command, "l.perft")) {
+                const depth = std.fmt.parseUnsigned(usize, it.next() orelse "1", 10) catch {
+                    try output.print("info string Error: Invalid argument to l.perft\n", .{});
+                    continue;
+                };
+                if (it.next() != null) try output.print("info string Warning: Unexpected extra arguments to l.perft\n", .{});
+                try divide(output, &board, depth);
+            } else {
+                try output.print("info string Error: Unknown command '{s}'\n", .{command});
+                continue;
+            }
+        }
     }
 }
 
