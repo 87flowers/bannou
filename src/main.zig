@@ -208,7 +208,7 @@ const State = struct {
             try writer.print(" -\n", .{});
         }
         // move counts
-        try writer.print("{} {}\n", .{ self.no_capture_clock, self.ply >> 1 });
+        try writer.print("{} {}\n", .{ self.no_capture_clock, (self.ply >> 1) + 1 });
     }
     pub fn parseParts(active_color: Color, castle_str: []const u8, enpassant_str: []const u8, no_capture_clock_str: []const u8, ply_str: []const u8) !State {
         var result: State = .{
@@ -236,8 +236,8 @@ const State = struct {
         result.no_capture_clock = try std.fmt.parseUnsigned(u8, no_capture_clock_str, 10);
         if (result.no_capture_clock > 200) return ParseError.OutOfRange;
         result.ply = try std.fmt.parseUnsigned(u16, ply_str, 10);
-        if (result.ply > 10000) return ParseError.OutOfRange;
-        result.ply = result.ply * 2 + @intFromEnum(active_color);
+        if (result.ply < 1 or result.ply > 10000) return ParseError.OutOfRange;
+        result.ply = (result.ply - 1) * 2 + @intFromEnum(active_color);
         return result;
     }
 };
