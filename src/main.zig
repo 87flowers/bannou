@@ -167,11 +167,6 @@ const castle_masks = [2][2]u64{
     [2]u64{ bk_castle_mask, bq_castle_mask },
 };
 
-const castling_empty_masks = [2][2]u64{
-    [2]u64{ bitFromCoord(0x05) | bitFromCoord(0x06), bitFromCoord(0x01) | bitFromCoord(0x02) | bitFromCoord(0x03) },
-    [2]u64{ bitFromCoord(0x75) | bitFromCoord(0x76), bitFromCoord(0x71) | bitFromCoord(0x72) | bitFromCoord(0x73) },
-};
-
 const State = struct {
     /// bitboard of locations which pieces have been moved from
     castle: u64,
@@ -462,7 +457,6 @@ const MoveList = struct {
 };
 
 const Board = struct {
-    bitboard: [2]u64,
     pieces: [32]PieceType,
     where: [32]u8,
     board: [128]Place,
@@ -471,7 +465,6 @@ const Board = struct {
 
     pub fn emptyBoard() Board {
         return .{
-            .bitboard = [2]u64{ 0, 0 },
             .pieces = [1]PieceType{.none} ** 32,
             .where = undefined,
             .board = [1]Place{empty_place} ** 128,
@@ -527,7 +520,6 @@ const Board = struct {
         self.pieces[id] = ptype;
         self.where[id] = coord;
         self.board[coord] = Place{ .ptype = ptype, .id = id };
-        self.bitboard[toIndex(id)] |= bitFromCoord(coord);
     }
 
     fn move(self: *Board, m: Move) State {
@@ -539,15 +531,12 @@ const Board = struct {
                     assert(self.board[m.capture_coord] == m.capture_place);
                     self.pieces[m.capture_place.id] = .none;
                     self.board[m.capture_coord] = empty_place;
-                    self.bitboard[~toIndex(m.id)] &= ~bitFromCoord(m.capture_coord);
                 }
                 assert(self.board[m.src_coord] == Place{ .ptype = m.src_ptype, .id = m.id });
                 self.board[m.src_coord] = empty_place;
                 self.board[m.dest_coord] = Place{ .ptype = m.dest_ptype, .id = m.id };
                 self.where[m.id] = m.dest_coord;
                 self.pieces[m.id] = m.dest_ptype;
-                self.bitboard[toIndex(m.id)] &= ~bitFromCoord(m.src_coord);
-                self.bitboard[toIndex(m.id)] |= bitFromCoord(m.dest_coord);
             },
             .castle => {
                 self.board[m.code.src()] = empty_place;
@@ -556,8 +545,6 @@ const Board = struct {
                 self.board[m.dest_coord] = Place{ .ptype = .r, .id = m.id };
                 self.where[m.id & 0x10] = m.code.dest();
                 self.where[m.id] = m.dest_coord;
-                self.bitboard[toIndex(m.id)] &= ~(bitFromCoord(m.src_coord) | bitFromCoord(m.code.src()));
-                self.bitboard[toIndex(m.id)] |= bitFromCoord(m.dest_coord) | bitFromCoord(m.code.dest());
             },
         }
         self.state = m.state;
@@ -572,13 +559,10 @@ const Board = struct {
                 if (m.capture_place != empty_place) {
                     self.pieces[m.capture_place.id] = m.capture_place.ptype;
                     self.board[m.capture_coord] = m.capture_place;
-                    self.bitboard[~toIndex(m.id)] |= bitFromCoord(m.capture_coord);
                 }
                 self.board[m.src_coord] = Place{ .ptype = m.src_ptype, .id = m.id };
                 self.where[m.id] = m.src_coord;
                 self.pieces[m.id] = m.src_ptype;
-                self.bitboard[toIndex(m.id)] &= ~bitFromCoord(m.dest_coord);
-                self.bitboard[toIndex(m.id)] |= bitFromCoord(m.src_coord);
             },
             .castle => {
                 self.board[m.code.dest()] = empty_place;
@@ -587,8 +571,6 @@ const Board = struct {
                 self.board[m.src_coord] = Place{ .ptype = .r, .id = m.id };
                 self.where[m.id & 0x10] = m.code.src();
                 self.where[m.id] = m.src_coord;
-                self.bitboard[toIndex(m.id)] &= ~(bitFromCoord(m.dest_coord) | bitFromCoord(m.code.dest()));
-                self.bitboard[toIndex(m.id)] |= bitFromCoord(m.src_coord) | bitFromCoord(m.code.src());
             },
         }
         self.state = old_state;
@@ -751,14 +733,13 @@ fn generateMovesForPiece(board: *Board, moves: *MoveList, id: u5) void {
             const rank: u8 = board.active_color.backRank();
             if (board.where[id] == rank | 4) {
                 const castle_k, const castle_q = castle_masks[@intFromEnum(board.active_color)];
-                const empty_k, const empty_q = castling_empty_masks[@intFromEnum(board.active_color)];
-                if (castle_k & board.state.castle == 0 and (board.bitboard[0] | board.bitboard[1]) & empty_k == 0) {
+                if (castle_k & board.state.castle == 0 and board.board[rank | 5] == empty_place and board.board[rank | 6] == empty_place) {
                     if (!isAttacked(board, rank | 4, board.active_color) and !isAttacked(board, rank | 5, board.active_color) and !isAttacked(board, rank | 6, board.active_color)) {
                         assert(board.board[rank | 7].ptype == .r and getColor(board.board[rank | 7].id) == board.active_color);
                         moves.addCastle(board.state, board.board[rank | 7].id, rank | 7, rank | 5, rank | 4, rank | 6);
                     }
                 }
-                if (castle_q & board.state.castle == 0 and (board.bitboard[0] | board.bitboard[1]) & empty_q == 0) {
+                if (castle_q & board.state.castle == 0 and board.board[rank | 1] == empty_place and board.board[rank | 2] == empty_place and board.board[rank | 3] == empty_place) {
                     if (!isAttacked(board, rank | 2, board.active_color) and !isAttacked(board, rank | 3, board.active_color) and !isAttacked(board, rank | 4, board.active_color)) {
                         assert(board.board[rank | 0].ptype == .r and getColor(board.board[rank | 0].id) == board.active_color);
                         moves.addCastle(board.state, board.board[rank | 0].id, rank | 0, rank | 3, rank | 4, rank | 2);
@@ -852,17 +833,11 @@ pub fn perft(board: *Board, depth: usize) usize {
     generateMoves(board, &moves);
     for (0..moves.size) |i| {
         const m = moves.moves[i];
-        const old_board = board.*;
         const old_state = board.move(m);
         if (!isAttacked(board, board.where[board.active_color.invert().idBase()], board.active_color.invert())) {
             result += perft(board, depth - 1);
         }
         board.unmove(m, old_state);
-        if (!std.meta.eql(board.*, old_board)) {
-            board.debugPrint();
-            old_board.debugPrint();
-            @breakpoint();
-        }
     }
     return result;
 }
