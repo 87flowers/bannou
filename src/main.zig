@@ -871,6 +871,7 @@ pub fn divide(output: anytype, board: *Board, depth: usize) !void {
     if (depth == 0) return;
     var result: usize = 0;
     var moves = MoveList{};
+    var timer = try std.time.Timer.start();
     generateMoves(board, &moves);
     for (0..moves.size) |i| {
         const m = moves.moves[i];
@@ -882,7 +883,9 @@ pub fn divide(output: anytype, board: *Board, depth: usize) !void {
         }
         board.unmove(m, old_state);
     }
+    const elapsed: f64 = @floatFromInt(timer.read());
     try output.print("Nodes searched (depth {}): {}\n", .{ depth, result });
+    try output.print("Search completed in {d:.1}ms\n", .{elapsed / std.time.ns_per_ms});
 }
 
 pub fn main() !void {
@@ -925,7 +928,7 @@ pub fn main() !void {
                                 break;
                             };
                             if (!makeMoveByCode(&board, code)) {
-                                try output.print("info string Error: Illegal move '{s}' in position {}\n", .{move_str, board});
+                                try output.print("info string Error: Illegal move '{s}' in position {}\n", .{ move_str, board });
                                 break;
                             }
                         }
@@ -941,7 +944,7 @@ pub fn main() !void {
                         break;
                     };
                     if (!makeMoveByCode(&board, code)) {
-                        try output.print("info string Error: Illegal move '{s}' in position {}\n", .{move_str, board});
+                        try output.print("info string Error: Illegal move '{s}' in position {}\n", .{ move_str, board });
                         break;
                     }
                 }
