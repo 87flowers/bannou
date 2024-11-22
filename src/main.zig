@@ -7,13 +7,13 @@ const ParseError = error{
 };
 
 const PieceType = enum(u3) {
-    none,
-    k,
-    q,
-    r,
-    b,
-    n,
-    p,
+    none = 0,
+    k = 6,
+    q = 5,
+    r = 4,
+    b = 3,
+    n = 2,
+    p = 1,
 
     pub fn toChar(self: PieceType, color: Color) u8 {
         return @as(u8, switch (self) {
@@ -244,6 +244,9 @@ const MoveType = enum {
 
 const MoveCode = struct {
     code: u16,
+    pub fn isPromotion(self: MoveCode) bool {
+        return self.code & 7 != 0;
+    }
     pub fn src(self: MoveCode) u8 {
         return uncompressCoord(@truncate(self.code >> 9));
     }
@@ -596,7 +599,7 @@ const Board = struct {
                     try writer.print("{}", .{blanks});
                     blanks = 0;
                 }
-                try writer.print("/", .{});
+                if (i != 63) try writer.print("/", .{});
             }
         }
         try writer.print(" {} {}", .{ self.active_color, self.state });
@@ -863,13 +866,124 @@ pub fn divide(output: anytype, board: *Board, depth: usize) !void {
     try output.print("Search completed in {d:.1}ms\n", .{elapsed / std.time.ns_per_ms});
 }
 
+const rand = std.crypto.random;
+pub fn eval(board: *Board) i32 {
+    var score: i32 = 0;
+    for (0..16) |w| {
+        score += switch (board.pieces[w]) {
+            .none => 0,
+            .k => 1000000,
+            .q => 1000,
+            .r => 500,
+            .b => 310,
+            .n => 300,
+            .p => 100,
+        };
+    }
+    for (16..32) |b| {
+        score += switch (board.pieces[b]) {
+            .none => 0,
+            .k => -1000000,
+            .q => -1000,
+            .r => -500,
+            .b => -310,
+            .n => -300,
+            .p => -100,
+        };
+    }
+    score += rand.intRangeAtMostBiased(i32, -20, 20);
+    return switch (board.active_color) {
+        .white => score,
+        .black => -score,
+    };
+}
+
+pub fn search(board: *Board, alpha: i32, beta: i32, depth: i32) i32 {
+    if (depth <= 0) return eval(board);
+    var moves = MoveList{};
+    generateMoves(board, &moves);
+    const no_moves = -std.math.maxInt(i32);
+    var best_score: i32 = no_moves;
+    for (0..moves.size) |i| {
+        const m = moves.moves[i];
+        const old_state = board.move(m);
+        defer board.unmove(m, old_state);
+        if (!isAttacked(board, board.where[board.active_color.invert().idBase()], board.active_color.invert())) {
+            const child_score = -search(board, -beta, -@max(alpha, best_score), depth - 1);
+            if (child_score > best_score) best_score = child_score;
+            if (best_score > beta) break;
+        }
+    }
+    if (best_score == no_moves and !isAttacked(board, board.where[board.active_color.idBase()], board.active_color)) {
+        best_score = 0;
+    }
+    if (best_score < -1073741824) return best_score + 1;
+    return best_score;
+}
+
+pub fn bestmove(board: *Board, depth: i32) struct { ?Move, i32 } {
+    var moves = MoveList{};
+    generateMoves(board, &moves);
+    var bestmove_i: usize = 0;
+    var bestmove_score: i32 = std.math.minInt(i32);
+    var valid_move_count: usize = 0;
+    for (0..moves.size) |i| {
+        const m = moves.moves[i];
+        const old_state = board.move(m);
+        defer board.unmove(m, old_state);
+        if (!isAttacked(board, board.where[board.active_color.invert().idBase()], board.active_color.invert())) {
+            const score = -search(board, -std.math.maxInt(i32), -@max(bestmove_score, -std.math.maxInt(i32)), depth);
+            if (score > bestmove_score) {
+                bestmove_score = score;
+                bestmove_i = i;
+            }
+            valid_move_count += 1;
+        }
+    }
+    if (valid_move_count == 0) return .{ null, bestmove_score };
+    return .{ moves.moves[bestmove_i], bestmove_score };
+}
+
+const TimeControl = struct {
+    wtime: ?u64 = null,
+    btime: ?u64 = null,
+    winc: ?u64 = null,
+    binc: ?u64 = null,
+    movestogo: ?u64 = null,
+};
+
+pub fn uciGo(output: anytype, board: *Board, tc: TimeControl) !void {
+    var timer = try std.time.Timer.start();
+    const margin = 1000;
+    const movestogo = tc.movestogo orelse 30;
+    assert(tc.wtime != null and tc.btime != null);
+    const time_remaining = switch (board.active_color) {
+        .white => tc.wtime.?,
+        .black => tc.btime.?,
+    };
+    const deadline = (@max(time_remaining, margin) - margin) * 1_000_000 / movestogo; // nanoseconds
+    var depth: i32 = 1;
+    var rootmove: ?Move = null;
+    try output.print("info string pos {}\n", .{board});
+    while (deadline / 2 > timer.read() or depth < 2) : (depth += 1) {
+        rootmove, const score = bestmove(board, depth);
+        try output.print("info string depth {} move {any} score {} time {}\n", .{ depth, rootmove, score, timer.read() / 1_000_000 });
+        if (rootmove == null) break;
+    }
+    if (rootmove) |rm| {
+        try output.print("bestmove {}\n", .{rm});
+    } else {
+        try output.print("info string Error: No moves found in position\n", .{});
+    }
+}
+
 pub fn main() !void {
     var input = std.io.getStdIn().reader();
     var output = std.io.getStdOut().writer();
 
     var board = Board.defaultBoard();
 
-    var buffer: [256]u8 = undefined;
+    var buffer: [2048]u8 = undefined;
     while (try input.readUntilDelimiterOrEof(&buffer, '\n')) |line| {
         var it = std.mem.tokenizeAny(u8, line, " \t\r\n");
         if (it.next()) |command| {
@@ -877,6 +991,16 @@ pub fn main() !void {
                 return;
             } else if (std.mem.eql(u8, command, "d")) {
                 board.debugPrint();
+            } else if (std.mem.eql(u8, command, "uci")) {
+                try output.print("{s}\n", .{
+                    \\id name Bannou 0.1
+                    \\id author 87 (87flowers.com)
+                    \\uciok
+                });
+            } else if (std.mem.eql(u8, command, "ucinewgame")) {
+                // Clear caches, etc.
+            } else if (std.mem.eql(u8, command, "isready")) {
+                try output.print("readyok\n", .{});
             } else if (std.mem.eql(u8, command, "position")) {
                 const pos_type = it.next() orelse "startpos";
                 if (std.mem.eql(u8, pos_type, "startpos")) {
@@ -892,26 +1016,47 @@ pub fn main() !void {
                         try output.print("info string Error: Invalid FEN for position command\n", .{});
                         continue;
                     };
-                    if (it.next()) |moves_str| {
-                        if (!std.mem.eql(u8, moves_str, "moves")) {
-                            try output.print("info string Error: Unexpected token '{s}' in position command\n", .{moves_str});
-                            continue;
-                        }
-                        while (it.next()) |move_str| {
-                            const code = MoveCode.parse(move_str) catch {
-                                try output.print("info string Error: Invalid movecode '{s}'\n", .{move_str});
-                                break;
-                            };
-                            if (!makeMoveByCode(&board, code)) {
-                                try output.print("info string Error: Illegal move '{s}' in position {}\n", .{ move_str, board });
-                                break;
-                            }
-                        }
-                    }
                 } else {
                     try output.print("info string Error: Invalid position type '{s}' for position command\n", .{pos_type});
                     continue;
                 }
+                if (it.next()) |moves_str| {
+                    if (!std.mem.eql(u8, moves_str, "moves")) {
+                        try output.print("info string Error: Unexpected token '{s}' in position command\n", .{moves_str});
+                        continue;
+                    }
+                    while (it.next()) |move_str| {
+                        const code = MoveCode.parse(move_str) catch {
+                            try output.print("info string Error: Invalid movecode '{s}'\n", .{move_str});
+                            break;
+                        };
+                        if (!makeMoveByCode(&board, code)) {
+                            try output.print("info string Error: Illegal move '{s}' in position {}\n", .{ move_str, board });
+                            break;
+                        }
+                    }
+                }
+            } else if (std.mem.eql(u8, command, "go")) {
+                var tc = TimeControl{};
+                while (it.next()) |part| {
+                    if (std.mem.eql(u8, part, "wtime")) {
+                        const str = it.next() orelse break;
+                        tc.wtime = std.fmt.parseUnsigned(u64, str, 10) catch continue;
+                    } else if (std.mem.eql(u8, part, "btime")) {
+                        const str = it.next() orelse break;
+                        tc.btime = std.fmt.parseUnsigned(u64, str, 10) catch continue;
+                    } else if (std.mem.eql(u8, part, "winc")) {
+                        const str = it.next() orelse break;
+                        tc.winc = std.fmt.parseUnsigned(u64, str, 10) catch continue;
+                    } else if (std.mem.eql(u8, part, "binc")) {
+                        const str = it.next() orelse break;
+                        tc.binc = std.fmt.parseUnsigned(u64, str, 10) catch continue;
+                    } else if (std.mem.eql(u8, part, "movestogo")) {
+                        const str = it.next() orelse break;
+                        tc.movestogo = std.fmt.parseUnsigned(u64, str, 10) catch continue;
+                    }
+                }
+                try uciGo(output, &board, tc);
             } else if (std.mem.eql(u8, command, "l.move")) {
                 while (it.next()) |move_str| {
                     const code = MoveCode.parse(move_str) catch {
@@ -930,6 +1075,21 @@ pub fn main() !void {
                 };
                 if (it.next() != null) try output.print("info string Warning: Unexpected extra arguments to l.perft\n", .{});
                 try divide(output, &board, depth);
+            } else if (std.mem.eql(u8, command, "l.bestmove")) {
+                const str = it.next() orelse break;
+                const depth = std.fmt.parseInt(i32, str, 10) catch continue;
+                try output.print("{any}\n", .{bestmove(&board, depth)});
+            } else if (std.mem.eql(u8, command, "l.auto")) {
+                const str = it.next() orelse break;
+                const depth = std.fmt.parseInt(i32, str, 10) catch continue;
+                const bm = bestmove(&board, depth);
+                try output.print("{any}\n", .{bm});
+                if (bm[0]) |m| {
+                    _ = makeMoveByCode(&board, m.code);
+                } else {
+                    try output.print("No valid move.\n", .{});
+                }
+                board.debugPrint();
             } else {
                 try output.print("info string Error: Unknown command '{s}'\n", .{command});
                 continue;
