@@ -1120,8 +1120,8 @@ test {
 const tt_size = 0x1000000;
 var tt: [tt_size]TTEntry = [_]TTEntry{TTEntry.empty()} ** tt_size;
 
-pub fn search(board: *Board, alpha: i32, beta: i32, depth: i32) i32 {
-    if (depth <= 0) return eval(board);
+pub fn search(board: *Board, alpha: i32, beta: i32, depth: i32) struct { ?MoveCode, i32 } {
+    if (depth <= 0) return .{ null, eval(board) };
 
     const tt_index = board.state.hash % tt_size;
     const tte = tt[tt_index];
@@ -1139,7 +1139,8 @@ pub fn search(board: *Board, alpha: i32, beta: i32, depth: i32) i32 {
         const old_state = board.move(m);
         defer board.unmove(m, old_state);
         if (!isAttacked(board, board.where[board.active_color.invert().idBase()], board.active_color.invert())) {
-            const child_score = -search(board, -beta, -@max(alpha, best_score), depth - 1);
+            _, const neg_child_score = search(board, -beta, -@max(alpha, best_score), depth - 1);
+            const child_score = -neg_child_score;
             if (child_score > best_score) {
                 best_score = child_score;
                 best_move = m.code;
@@ -1147,8 +1148,13 @@ pub fn search(board: *Board, alpha: i32, beta: i32, depth: i32) i32 {
             if (best_score > beta) break;
         }
     }
-    if (best_score == no_moves and !isAttacked(board, board.where[board.active_color.idBase()], board.active_color)) {
-        best_score = 0;
+
+    if (best_score == no_moves) {
+        if (!isAttacked(board, board.where[board.active_color.idBase()], board.active_color)) {
+            return .{ null, 0 };
+        } else {
+            return .{ null, no_moves };
+        }
     }
     if (best_score < -1073741824) best_score = best_score + 1;
 
@@ -1156,41 +1162,18 @@ pub fn search(board: *Board, alpha: i32, beta: i32, depth: i32) i32 {
         tt[tt_index] = .{
             .hash = board.state.hash,
             .best_move = best_move,
-            .depth = @intCast(@min(0, depth)),
+            .depth = @intCast(@max(0, depth)),
             .score = best_score,
             .bound = if (best_score >= beta)
                 .lower
-            else if (@max(alpha, best_score) == alpha)
+            else if (best_score <= alpha)
                 .upper
             else
                 .exact,
         };
     }
 
-    return best_score;
-}
-
-pub fn bestmove(board: *Board, depth: i32) struct { ?Move, i32 } {
-    var moves = MoveList{};
-    generateMoves(board, &moves);
-    var bestmove_i: usize = 0;
-    var bestmove_score: i32 = std.math.minInt(i32);
-    var valid_move_count: usize = 0;
-    for (0..moves.size) |i| {
-        const m = moves.moves[i];
-        const old_state = board.move(m);
-        defer board.unmove(m, old_state);
-        if (!isAttacked(board, board.where[board.active_color.invert().idBase()], board.active_color.invert())) {
-            const score = -search(board, -std.math.maxInt(i32), -@max(bestmove_score, -std.math.maxInt(i32)), depth);
-            if (score > bestmove_score) {
-                bestmove_score = score;
-                bestmove_i = i;
-            }
-            valid_move_count += 1;
-        }
-    }
-    if (valid_move_count == 0) return .{ null, bestmove_score };
-    return .{ moves.moves[bestmove_i], bestmove_score };
+    return .{ best_move, best_score };
 }
 
 const TimeControl = struct {
@@ -1212,10 +1195,10 @@ pub fn uciGo(output: anytype, board: *Board, tc: TimeControl) !void {
     };
     const deadline = (@max(time_remaining, margin) - margin) * 1_000_000 / movestogo; // nanoseconds
     var depth: i32 = 1;
-    var rootmove: ?Move = null;
+    var rootmove: ?MoveCode = null;
     try output.print("info string pos {}\n", .{board});
     while (deadline / 2 > timer.read() or depth < 2) : (depth += 1) {
-        rootmove, const score = bestmove(board, depth);
+        rootmove, const score = search(board, -std.math.maxInt(i32), std.math.maxInt(i32), depth);
         try output.print("info string depth {} move {any} score {} time {}\n", .{ depth, rootmove, score, timer.read() / 1_000_000 });
         if (rootmove == null) break;
     }
@@ -1298,7 +1281,7 @@ pub fn main() !void {
                 @memset(&tt, TTEntry.empty());
             } else if (std.mem.eql(u8, command, "uci")) {
                 try output.print("{s}\n", .{
-                    \\id name Bannou 0.2
+                    \\id name Bannou 0.3
                     \\id author 87 (87flowers.com)
                     \\uciok
                 });
@@ -1328,9 +1311,9 @@ pub fn main() !void {
                 if (it.next() != null) try output.print("info string Warning: Unexpected extra arguments to l.perft\n", .{});
                 try divide(output, &board, depth);
             } else if (std.mem.eql(u8, command, "l.bestmove")) {
-                const str = it.next() orelse break;
+                const str = it.next() orelse continue;
                 const depth = std.fmt.parseInt(i32, str, 10) catch continue;
-                try output.print("{any}\n", .{bestmove(&board, depth)});
+                try output.print("{any}\n", .{search(&board, -std.math.maxInt(i32), std.math.maxInt(i32), depth)});
             } else if (std.mem.eql(u8, command, "l.eval")) {
                 try output.print("{}\n", .{eval(&board)});
             } else if (std.mem.eql(u8, command, "l.history")) {
@@ -1338,12 +1321,12 @@ pub fn main() !void {
                     try output.print("{}: {X}\n", .{ i, h });
                 }
             } else if (std.mem.eql(u8, command, "l.auto")) {
-                const str = it.next() orelse break;
+                const str = it.next() orelse continue;
                 const depth = std.fmt.parseInt(i32, str, 10) catch continue;
-                const bm = bestmove(&board, depth);
+                const bm = search(&board, -std.math.maxInt(i32), std.math.maxInt(i32), depth);
                 try output.print("{any}\n", .{bm});
                 if (bm[0]) |m| {
-                    _ = makeMoveByCode(&board, m.code);
+                    _ = makeMoveByCode(&board, m);
                 } else {
                     try output.print("No valid move.\n", .{});
                 }
