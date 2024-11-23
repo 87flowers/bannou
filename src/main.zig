@@ -574,6 +574,7 @@ const Board = struct {
     board: [128]Place,
     state: State,
     active_color: Color,
+    zhistory: [1024]u64,
 
     pub fn emptyBoard() Board {
         return comptime blk: {
@@ -589,8 +590,10 @@ const Board = struct {
                     .hash = undefined,
                 },
                 .active_color = .white,
+                .zhistory = undefined,
             };
             result.state.hash = result.calcHashSlow();
+            result.zhistory[result.state.ply] = result.state.hash;
             break :blk result;
         };
     }
@@ -630,6 +633,7 @@ const Board = struct {
             result.place(0x1D, .p, 0x65);
             result.place(0x1E, .p, 0x66);
             result.place(0x1F, .p, 0x67);
+            result.zhistory[result.state.ply] = result.state.hash;
             break :blk result;
         };
     }
@@ -669,6 +673,7 @@ const Board = struct {
         }
         self.state = m.state;
         self.active_color = self.active_color.invert();
+        self.zhistory[m.state.ply] = m.state.hash;
         assert(self.state.hash == self.calcHashSlow());
         return result;
     }
@@ -999,6 +1004,27 @@ pub fn divide(output: anytype, board: *Board, depth: usize) !void {
 
 const rand = std.crypto.random;
 pub fn eval(board: *Board) i32 {
+    // detect repetition
+    {
+        const zcurrent = board.state.hash;
+
+        var i: u16 = board.state.ply - board.state.no_capture_clock;
+        i += @intFromEnum(board.active_color.invert());
+        i &= ~@as(u16, 1);
+        i += @intFromEnum(board.active_color);
+
+        while (i + 4 <= board.state.ply) : (i += 2) {
+            if (board.zhistory[i] == zcurrent) {
+                return 0;
+            }
+        }
+    }
+    // detect 50 move rule
+    if (board.state.no_capture_clock >= 100) {
+        // TODO: detect if this move is checkmate
+        return 0;
+    }
+
     var score: i32 = 0;
     for (0..16) |w| {
         score += switch (board.pieces[w]) {
@@ -1213,6 +1239,12 @@ pub fn main() !void {
                 const str = it.next() orelse break;
                 const depth = std.fmt.parseInt(i32, str, 10) catch continue;
                 try output.print("{any}\n", .{bestmove(&board, depth)});
+            } else if (std.mem.eql(u8, command, "l.eval")) {
+                try output.print("{}\n", .{eval(&board)});
+            } else if (std.mem.eql(u8, command, "l.history")) {
+                for (board.zhistory[0..board.state.ply + 1], 0..) |h, i| {
+                    try output.print("{}: {X}\n", .{ i, h });
+                }
             } else if (std.mem.eql(u8, command, "l.auto")) {
                 const str = it.next() orelse break;
                 const depth = std.fmt.parseInt(i32, str, 10) catch continue;
