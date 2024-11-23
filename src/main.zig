@@ -1120,8 +1120,40 @@ test {
 const tt_size = 0x1000000;
 var tt: [tt_size]TTEntry = [_]TTEntry{TTEntry.empty()} ** tt_size;
 
-pub fn search(board: *Board, alpha: i32, beta: i32, depth: i32) struct { ?MoveCode, i32 } {
+const SearchTimer = struct {
+    timer: std.time.Timer,
+    deadline: u64,
+    safe_time_remaining: u64,
+    pub fn init(deadline: u64, safe_time_remaining: u64) SearchTimer {
+        return .{
+            .timer = std.time.Timer.start() catch unreachable,
+            .deadline = deadline,
+            .safe_time_remaining = safe_time_remaining,
+        };
+    }
+    pub fn dummy() SearchTimer {
+        return .{
+            .timer = std.time.Timer.start() catch unreachable,
+            .deadline = std.math.maxInt(u64),
+            .safe_time_remaining = std.math.maxInt(u64),
+        };
+    }
+    pub fn read(self: *SearchTimer) u64 {
+        return self.timer.read();
+    }
+    pub fn hardExpired(self: *SearchTimer) bool {
+        return self.safe_time_remaining / 2 <= self.timer.read();
+    }
+    pub fn softExpired(self: *SearchTimer) bool {
+        return self.deadline / 2 <= self.timer.read();
+    }
+};
+const SearchError = error {
+    OutOfTime,
+};
+pub fn search(board: *Board, timer: *SearchTimer, alpha: i32, beta: i32, depth: i32) SearchError!struct { ?MoveCode, i32 } {
     if (depth <= 0) return .{ null, eval(board) };
+    if (depth > 3 and timer.hardExpired()) return SearchError.OutOfTime;
 
     const tt_index = board.state.hash % tt_size;
     const tte = tt[tt_index];
@@ -1139,7 +1171,7 @@ pub fn search(board: *Board, alpha: i32, beta: i32, depth: i32) struct { ?MoveCo
         const old_state = board.move(m);
         defer board.unmove(m, old_state);
         if (!isAttacked(board, board.where[board.active_color.invert().idBase()], board.active_color.invert())) {
-            _, const neg_child_score = search(board, -beta, -@max(alpha, best_score), depth - 1);
+            _, const neg_child_score = try search(board, timer, -beta, -@max(alpha, best_score), depth - 1);
             const child_score = -neg_child_score;
             if (child_score > best_score) {
                 best_score = child_score;
@@ -1153,7 +1185,7 @@ pub fn search(board: *Board, alpha: i32, beta: i32, depth: i32) struct { ?MoveCo
         if (!isAttacked(board, board.where[board.active_color.idBase()], board.active_color)) {
             return .{ null, 0 };
         } else {
-            return .{ null, no_moves };
+            return .{ null, no_moves + 1 };
         }
     }
     if (best_score < -1073741824) best_score = best_score + 1;
@@ -1185,27 +1217,34 @@ const TimeControl = struct {
 };
 
 pub fn uciGo(output: anytype, board: *Board, tc: TimeControl) !void {
-    var timer = try std.time.Timer.start();
-    const margin = 1000;
+    const margin = 100;
     const movestogo = tc.movestogo orelse 30;
     assert(tc.wtime != null and tc.btime != null);
     const time_remaining = switch (board.active_color) {
         .white => tc.wtime.?,
         .black => tc.btime.?,
     };
-    const deadline = (@max(time_remaining, margin) - margin) * 1_000_000 / movestogo; // nanoseconds
+    const safe_time_remaining = (@max(time_remaining, margin) - margin) * 1_000_000; // nanoseconds
+    const deadline = safe_time_remaining / movestogo; // nanoseconds
+    var timer = SearchTimer.init(deadline, safe_time_remaining);
+
     var depth: i32 = 1;
     var rootmove: ?MoveCode = null;
     try output.print("info string pos {}\n", .{board});
-    while (deadline / 2 > timer.read() or depth < 2) : (depth += 1) {
-        rootmove, const score = search(board, -std.math.maxInt(i32), std.math.maxInt(i32), depth);
+    while (true) : (depth += 1) {
+        rootmove, const score = search(board, &timer, -std.math.maxInt(i32), std.math.maxInt(i32), depth) catch {
+            try output.print("info string depth {} (partial) move {any} time {} [hard expired, deadline = {}]\n", .{ depth, rootmove, timer.read() / 1_000_000, deadline / 1_000_000 });
+            break;
+        };
         try output.print("info string depth {} move {any} score {} time {}\n", .{ depth, rootmove, score, timer.read() / 1_000_000 });
+        if (timer.softExpired()) break;
         if (rootmove == null) break;
     }
     if (rootmove) |rm| {
         try output.print("bestmove {}\n", .{rm});
     } else {
         try output.print("info string Error: No moves found in position\n", .{});
+        try output.print("bestmove null\n", .{});
     }
 }
 
@@ -1281,7 +1320,7 @@ pub fn main() !void {
                 @memset(&tt, TTEntry.empty());
             } else if (std.mem.eql(u8, command, "uci")) {
                 try output.print("{s}\n", .{
-                    \\id name Bannou 0.3
+                    \\id name Bannou 0.4
                     \\id author 87 (87flowers.com)
                     \\uciok
                 });
@@ -1313,7 +1352,8 @@ pub fn main() !void {
             } else if (std.mem.eql(u8, command, "l.bestmove")) {
                 const str = it.next() orelse continue;
                 const depth = std.fmt.parseInt(i32, str, 10) catch continue;
-                try output.print("{any}\n", .{search(&board, -std.math.maxInt(i32), std.math.maxInt(i32), depth)});
+                var timer = SearchTimer.dummy();
+                try output.print("{any}\n", .{try search(&board, &timer, -std.math.maxInt(i32), std.math.maxInt(i32), depth)});
             } else if (std.mem.eql(u8, command, "l.eval")) {
                 try output.print("{}\n", .{eval(&board)});
             } else if (std.mem.eql(u8, command, "l.history")) {
@@ -1323,7 +1363,8 @@ pub fn main() !void {
             } else if (std.mem.eql(u8, command, "l.auto")) {
                 const str = it.next() orelse continue;
                 const depth = std.fmt.parseInt(i32, str, 10) catch continue;
-                const bm = search(&board, -std.math.maxInt(i32), std.math.maxInt(i32), depth);
+                var timer = SearchTimer.dummy();
+                const bm = try search(&board, &timer, -std.math.maxInt(i32), std.math.maxInt(i32), depth);
                 try output.print("{any}\n", .{bm});
                 if (bm[0]) |m| {
                     _ = makeMoveByCode(&board, m);
