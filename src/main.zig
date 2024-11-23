@@ -1157,6 +1157,16 @@ pub fn search(board: *Board, timer: *SearchTimer, alpha: i32, beta: i32, depth: 
 
     const tt_index = board.state.hash % tt_size;
     const tte = tt[tt_index];
+    if (tte.hash == board.state.hash) {
+        if (tte.depth >= depth) {
+            const pass = switch (tte.bound) {
+                .lower => tte.score >= beta,
+                .exact => alpha + 1 == beta,
+                .upper => tte.score <= alpha,
+            };
+            if (pass) return .{ tte.best_move, tte.score };
+        }
+    }
 
     var moves = MoveList{};
     generateMoves(board, &moves);
@@ -1320,7 +1330,7 @@ pub fn main() !void {
                 @memset(&tt, TTEntry.empty());
             } else if (std.mem.eql(u8, command, "uci")) {
                 try output.print("{s}\n", .{
-                    \\id name Bannou 0.4
+                    \\id name Bannou 0.5
                     \\id author 87 (87flowers.com)
                     \\uciok
                 });
