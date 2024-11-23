@@ -362,6 +362,7 @@ const MoveList = struct {
                 .no_capture_clock = state.no_capture_clock + 1,
                 .ply = state.ply + 1,
                 .hash = state.hash ^
+                    zhash_move ^
                     zhashPiece(getColor(id), ptype, src) ^
                     zhashPiece(getColor(id), ptype, dest) ^
                     state.enpassant ^
@@ -385,15 +386,22 @@ const MoveList = struct {
             .dest_ptype = ptype,
             .capture_coord = dest,
             .capture_place = capture_place,
-            .state = .{ .castle = state.castle, .enpassant = 0xFF, .no_capture_clock = 0, .ply = state.ply + 1, .hash = state.hash ^
-                zhashPiece(getColor(id), ptype, src) ^
-                zhashPiece(getColor(id), ptype, dest) ^
-                switch (has_capture) {
-                .capture => zhashPiece(getColor(id).invert(), capture_place.ptype, dest),
-                .no_capture => 0,
-            } ^
-                state.enpassant ^
-                0xFF },
+            .state = .{
+                .castle = state.castle,
+                .enpassant = 0xFF,
+                .no_capture_clock = 0,
+                .ply = state.ply + 1,
+                .hash = state.hash ^
+                    zhash_move ^
+                    zhashPiece(getColor(id), ptype, src) ^
+                    zhashPiece(getColor(id), ptype, dest) ^
+                    switch (has_capture) {
+                    .capture => zhashPiece(getColor(id).invert(), capture_place.ptype, dest),
+                    .no_capture => 0,
+                } ^
+                    state.enpassant ^
+                    0xFF,
+            },
             .mtype = .normal,
         };
         self.size += 1;
@@ -409,11 +417,18 @@ const MoveList = struct {
             .dest_ptype = ptype,
             .capture_coord = dest,
             .capture_place = empty_place,
-            .state = .{ .castle = state.castle, .enpassant = enpassant, .no_capture_clock = 0, .ply = state.ply + 1, .hash = state.hash ^
-                zhashPiece(getColor(id), ptype, src) ^
-                zhashPiece(getColor(id), ptype, dest) ^
-                state.enpassant ^
-                enpassant },
+            .state = .{
+                .castle = state.castle,
+                .enpassant = enpassant,
+                .no_capture_clock = 0,
+                .ply = state.ply + 1,
+                .hash = state.hash ^
+                    zhash_move ^
+                    zhashPiece(getColor(id), ptype, src) ^
+                    zhashPiece(getColor(id), ptype, dest) ^
+                    state.enpassant ^
+                    enpassant,
+            },
             .mtype = .normal,
         };
         self.size += 1;
@@ -436,6 +451,7 @@ const MoveList = struct {
                 .no_capture_clock = 0,
                 .ply = state.ply + 1,
                 .hash = state.hash ^
+                    zhash_move ^
                     zhashPiece(getColor(id), src_ptype, src) ^
                     zhashPiece(getColor(id), dest_ptype, dest) ^
                     switch (has_capture) {
@@ -469,6 +485,7 @@ const MoveList = struct {
                 .no_capture_clock = 0,
                 .ply = state.ply + 1,
                 .hash = state.hash ^
+                    zhash_move ^
                     zhashPiece(getColor(id), ptype, src) ^
                     zhashPiece(getColor(id), ptype, dest) ^
                     zhashPiece(getColor(id).invert(), capture_place.ptype, dest) ^
@@ -494,12 +511,19 @@ const MoveList = struct {
             .dest_ptype = ptype,
             .capture_coord = capture_coord,
             .capture_place = capture_place,
-            .state = .{ .castle = state.castle, .enpassant = 0xFF, .no_capture_clock = 0, .ply = state.ply + 1, .hash = state.hash ^
-                zhashPiece(getColor(id), ptype, src) ^
-                zhashPiece(getColor(id), ptype, state.enpassant) ^
-                zhashPiece(getColor(id).invert(), capture_place.ptype, capture_coord) ^
-                state.enpassant ^
-                0xFF },
+            .state = .{
+                .castle = state.castle,
+                .enpassant = 0xFF,
+                .no_capture_clock = 0,
+                .ply = state.ply + 1,
+                .hash = state.hash ^
+                    zhash_move ^
+                    zhashPiece(getColor(id), ptype, src) ^
+                    zhashPiece(getColor(id), ptype, state.enpassant) ^
+                    zhashPiece(getColor(id).invert(), capture_place.ptype, capture_coord) ^
+                    state.enpassant ^
+                    0xFF,
+            },
             .mtype = .normal,
         };
         self.size += 1;
@@ -521,6 +545,7 @@ const MoveList = struct {
                 .no_capture_clock = state.no_capture_clock + 1,
                 .ply = state.ply + 1,
                 .hash = state.hash ^
+                    zhash_move ^
                     zhashPiece(getColor(rook_id), .k, src_king) ^
                     zhashPiece(getColor(rook_id), .k, dest_king) ^
                     zhashPiece(getColor(rook_id), .r, src_rook) ^
@@ -565,6 +590,7 @@ const Prng = struct {
     }
 };
 
+const zhash_move = 0x446c_92da_bed9_5f78;
 const zhash_pieces: [2 * 8 * 0x80]u64 = blk: {
     @setEvalBranchQuota(1000000);
     var prng = Prng.init();
@@ -789,6 +815,7 @@ const Board = struct {
         }
         result ^= self.state.enpassant;
         result ^= zhashCastle(self.state.castle);
+        if (self.active_color == .black) result ^= zhash_move;
         return result;
     }
 
