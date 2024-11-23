@@ -161,6 +161,7 @@ const wk_castle_mask = bitFromCoord(0x04) | bitFromCoord(0x07);
 const wq_castle_mask = bitFromCoord(0x04) | bitFromCoord(0x00);
 const bk_castle_mask = bitFromCoord(0x74) | bitFromCoord(0x77);
 const bq_castle_mask = bitFromCoord(0x74) | bitFromCoord(0x70);
+const any_castle_mask = wk_castle_mask | wq_castle_mask | bk_castle_mask | bq_castle_mask;
 
 const castle_masks = [2][2]u64{
     [2]u64{ wk_castle_mask, wq_castle_mask },
@@ -176,6 +177,8 @@ const State = struct {
     no_capture_clock: u8,
     /// current move number (in half-moves)
     ply: u16,
+    /// Zorbrist hash for position
+    hash: u64,
 
     pub fn format(self: State, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
         // castling state
@@ -211,6 +214,7 @@ const State = struct {
             .enpassant = 0xFF,
             .no_capture_clock = undefined,
             .ply = undefined,
+            .hash = undefined,
         };
         if (!std.mem.eql(u8, castle_str, "-")) {
             var i: usize = 0;
@@ -310,6 +314,8 @@ const MoveList = struct {
     moves: [256]Move = undefined,
     size: u8 = 0,
 
+    const HasCapture = enum { capture, no_capture };
+
     pub fn add(self: *MoveList, state: State, ptype: PieceType, id: u5, src: u8, dest: u8) void {
         self.moves[self.size] = .{
             .code = MoveCode.make(ptype, src, ptype, dest),
@@ -325,13 +331,21 @@ const MoveList = struct {
                 .enpassant = 0xFF,
                 .no_capture_clock = state.no_capture_clock + 1,
                 .ply = state.ply + 1,
+                .hash = state.hash ^
+                    zhashPiece(getColor(id), ptype, src) ^
+                    zhashPiece(getColor(id), ptype, dest) ^
+                    state.enpassant ^
+                    0xFF ^
+                    (any_castle_mask & state.castle) ^
+                    (any_castle_mask & (state.castle | bitFromCoord(src))),
             },
             .mtype = .normal,
         };
         self.size += 1;
     }
 
-    pub fn addPawnOne(self: *MoveList, state: State, ptype: PieceType, id: u5, src: u8, dest: u8, capture_place: Place) void {
+    pub fn addPawnOne(self: *MoveList, state: State, ptype: PieceType, id: u5, src: u8, dest: u8, capture_place: Place, comptime has_capture: HasCapture) void {
+        assert((has_capture == .capture) != (capture_place == empty_place));
         self.moves[self.size] = .{
             .code = MoveCode.make(ptype, src, ptype, dest),
             .id = id,
@@ -346,6 +360,15 @@ const MoveList = struct {
                 .enpassant = 0xFF,
                 .no_capture_clock = 0,
                 .ply = state.ply + 1,
+                .hash = state.hash ^
+                    zhashPiece(getColor(id), ptype, src) ^
+                    zhashPiece(getColor(id), ptype, dest) ^
+                    switch (has_capture) {
+                        .capture => zhashPiece(getColor(id).invert(), capture_place.ptype, dest),
+                        .no_capture => 0,
+                    } ^
+                    state.enpassant ^
+                    0xFF
             },
             .mtype = .normal,
         };
@@ -367,13 +390,19 @@ const MoveList = struct {
                 .enpassant = enpassant,
                 .no_capture_clock = 0,
                 .ply = state.ply + 1,
+                .hash = state.hash ^
+                    zhashPiece(getColor(id), ptype, src) ^
+                    zhashPiece(getColor(id), ptype, dest) ^
+                    state.enpassant ^
+                    enpassant
             },
             .mtype = .normal,
         };
         self.size += 1;
     }
 
-    pub fn addPawnPromotion(self: *MoveList, state: State, src_ptype: PieceType, id: u5, src: u8, dest: u8, capture_place: Place, dest_ptype: PieceType) void {
+    pub fn addPawnPromotion(self: *MoveList, state: State, src_ptype: PieceType, id: u5, src: u8, dest: u8, capture_place: Place, dest_ptype: PieceType, comptime has_capture: HasCapture) void {
+        assert((has_capture == .capture) != (capture_place == empty_place));
         self.moves[self.size] = .{
             .code = MoveCode.make(src_ptype, src, dest_ptype, dest),
             .id = id,
@@ -388,6 +417,17 @@ const MoveList = struct {
                 .enpassant = 0xFF,
                 .no_capture_clock = 0,
                 .ply = state.ply + 1,
+                .hash = state.hash ^
+                    zhashPiece(getColor(id), src_ptype, src) ^
+                    zhashPiece(getColor(id), dest_ptype, dest) ^
+                    switch (has_capture) {
+                        .capture => zhashPiece(getColor(id).invert(), capture_place.ptype, dest),
+                        .no_capture => 0,
+                    } ^
+                    state.enpassant ^
+                    0xFF ^
+                    (any_castle_mask & state.castle) ^
+                    (any_castle_mask & (state.castle | bitFromCoord(dest))),
             },
             .mtype = .normal,
         };
@@ -395,6 +435,7 @@ const MoveList = struct {
     }
 
     pub fn addCapture(self: *MoveList, state: State, ptype: PieceType, id: u5, src: u8, dest: u8, capture_place: Place) void {
+        assert(getColor(id).invert() == getColor(capture_place.id));
         self.moves[self.size] = .{
             .code = MoveCode.make(ptype, src, ptype, dest),
             .id = id,
@@ -409,6 +450,14 @@ const MoveList = struct {
                 .enpassant = 0xFF,
                 .no_capture_clock = 0,
                 .ply = state.ply + 1,
+                .hash = state.hash ^
+                    zhashPiece(getColor(id), ptype, src) ^
+                    zhashPiece(getColor(id), ptype, dest) ^
+                    zhashPiece(getColor(id).invert(), capture_place.ptype, dest) ^
+                    state.enpassant ^
+                    0xFF ^
+                    (any_castle_mask & state.castle) ^
+                    (any_castle_mask & (state.castle | bitFromCoord(src) | bitFromCoord(dest))),
             },
             .mtype = .normal,
         };
@@ -417,6 +466,7 @@ const MoveList = struct {
 
     pub fn addEnpassant(self: *MoveList, state: State, ptype: PieceType, id: u5, src: u8, capture_coord: u8, capture_place: Place) void {
         assert(isValidCoord(state.enpassant));
+        assert(getColor(id).invert() == getColor(capture_place.id));
         self.moves[self.size] = .{
             .code = MoveCode.make(ptype, src, ptype, state.enpassant),
             .id = id,
@@ -431,6 +481,12 @@ const MoveList = struct {
                 .enpassant = 0xFF,
                 .no_capture_clock = 0,
                 .ply = state.ply + 1,
+                .hash = state.hash ^
+                    zhashPiece(getColor(id), ptype, src) ^
+                    zhashPiece(getColor(id), ptype, state.enpassant) ^
+                    zhashPiece(getColor(id).invert(), capture_place.ptype, capture_coord) ^
+                    state.enpassant ^
+                    0xFF
             },
             .mtype = .normal,
         };
@@ -452,12 +508,65 @@ const MoveList = struct {
                 .enpassant = 0xFF,
                 .no_capture_clock = state.no_capture_clock + 1,
                 .ply = state.ply + 1,
+                    .hash = state.hash ^
+                    zhashPiece(getColor(rook_id), .k, src_king) ^
+                    zhashPiece(getColor(rook_id), .k, dest_king) ^
+                    zhashPiece(getColor(rook_id), .r, src_rook) ^
+                    zhashPiece(getColor(rook_id), .r, dest_rook) ^
+                    state.enpassant ^
+                    0xFF ^
+                    (any_castle_mask & state.castle) ^
+                    (any_castle_mask & (state.castle | bitFromCoord(src_rook) | bitFromCoord(src_king))),
             },
             .mtype = .castle,
         };
         self.size += 1;
     }
 };
+
+const Prng = struct{
+    state: [4]u64,
+    pub fn init() Prng {
+        const key = [32]u8{
+            'b', 'a', 'n', 'n', 'o', 'u', 'r', 'n',
+            'g', 'h', 'a', 's', 'h', 'k', 'e', 'y',
+            'I', 'A', 'M', 'A', 'C', 'H', 'E', 'S',
+            'S', 'E', 'N', 'G', 'I', 'N', 'E', '!',
+        };
+        return .{
+            .state = .{
+                std.mem.readInt(u64, key[0..8], .little),
+                std.mem.readInt(u64, key[8..16], .little),
+                std.mem.readInt(u64, key[16..24], .little),
+                std.mem.readInt(u64, key[24..32], .little),
+            }
+        };
+    }
+    pub fn next(self: *Prng) u64 {
+        const result = std.math.rotl(u64, self.state[0] +% self.state[3], 23) +% self.state[0];
+        const t = self.state[1] << 17;
+        self.state[2] ^= self.state[0];
+        self.state[3] ^= self.state[1];
+        self.state[1] ^= self.state[2];
+        self.state[0] ^= self.state[3];
+        self.state[2] ^= t;
+        self.state[3] = std.math.rotl(u64, self.state[3], 45);
+        return result;
+    }
+};
+
+const zhash_pieces: [2 * 8 * 0x80]u64 = blk: {
+    @setEvalBranchQuota(1000000);
+    var prng = Prng.init();
+    var result: [2 * 8 * 0x80]u64 = undefined;
+    for (&result) |*hash| hash.* = prng.next();
+    break :blk result;
+};
+
+pub fn zhashPiece(color: Color, ptype: PieceType, coord: u8) u64 {
+    const index = @as(usize, @intFromEnum(ptype)) << 8 | @as(usize, @intFromEnum(color)) << 7 | @as(usize, coord);
+    return zhash_pieces[index];
+}
 
 const Board = struct {
     pieces: [32]PieceType,
@@ -467,55 +576,62 @@ const Board = struct {
     active_color: Color,
 
     pub fn emptyBoard() Board {
-        return .{
-            .pieces = [1]PieceType{.none} ** 32,
-            .where = undefined,
-            .board = [1]Place{empty_place} ** 128,
-            .state = .{
-                .castle = 0,
-                .enpassant = 0xff,
-                .no_capture_clock = 0,
-                .ply = 0,
-            },
-            .active_color = .white,
+        return comptime blk: {
+            var result: Board = .{
+                .pieces = [1]PieceType{.none} ** 32,
+                .where = undefined,
+                .board = [1]Place{empty_place} ** 128,
+                .state = .{
+                    .castle = 0,
+                    .enpassant = 0xff,
+                    .no_capture_clock = 0,
+                    .ply = 0,
+                    .hash = undefined,
+                },
+                .active_color = .white,
+            };
+            result.state.hash = result.calcHashSlow();
+            break :blk result;
         };
     }
 
     pub fn defaultBoard() Board {
-        var result = emptyBoard();
-        result.place(0x01, .r, 0x00);
-        result.place(0x03, .n, 0x01);
-        result.place(0x05, .b, 0x02);
-        result.place(0x07, .q, 0x03);
-        result.place(0x00, .k, 0x04);
-        result.place(0x06, .b, 0x05);
-        result.place(0x04, .n, 0x06);
-        result.place(0x02, .r, 0x07);
-        result.place(0x08, .p, 0x10);
-        result.place(0x09, .p, 0x11);
-        result.place(0x0A, .p, 0x12);
-        result.place(0x0B, .p, 0x13);
-        result.place(0x0C, .p, 0x14);
-        result.place(0x0D, .p, 0x15);
-        result.place(0x0E, .p, 0x16);
-        result.place(0x0F, .p, 0x17);
-        result.place(0x11, .r, 0x70);
-        result.place(0x13, .n, 0x71);
-        result.place(0x15, .b, 0x72);
-        result.place(0x17, .q, 0x73);
-        result.place(0x10, .k, 0x74);
-        result.place(0x16, .b, 0x75);
-        result.place(0x14, .n, 0x76);
-        result.place(0x12, .r, 0x77);
-        result.place(0x18, .p, 0x60);
-        result.place(0x19, .p, 0x61);
-        result.place(0x1A, .p, 0x62);
-        result.place(0x1B, .p, 0x63);
-        result.place(0x1C, .p, 0x64);
-        result.place(0x1D, .p, 0x65);
-        result.place(0x1E, .p, 0x66);
-        result.place(0x1F, .p, 0x67);
-        return result;
+        return comptime blk: {
+            var result = emptyBoard();
+            result.place(0x01, .r, 0x00);
+            result.place(0x03, .n, 0x01);
+            result.place(0x05, .b, 0x02);
+            result.place(0x07, .q, 0x03);
+            result.place(0x00, .k, 0x04);
+            result.place(0x06, .b, 0x05);
+            result.place(0x04, .n, 0x06);
+            result.place(0x02, .r, 0x07);
+            result.place(0x08, .p, 0x10);
+            result.place(0x09, .p, 0x11);
+            result.place(0x0A, .p, 0x12);
+            result.place(0x0B, .p, 0x13);
+            result.place(0x0C, .p, 0x14);
+            result.place(0x0D, .p, 0x15);
+            result.place(0x0E, .p, 0x16);
+            result.place(0x0F, .p, 0x17);
+            result.place(0x11, .r, 0x70);
+            result.place(0x13, .n, 0x71);
+            result.place(0x15, .b, 0x72);
+            result.place(0x17, .q, 0x73);
+            result.place(0x10, .k, 0x74);
+            result.place(0x16, .b, 0x75);
+            result.place(0x14, .n, 0x76);
+            result.place(0x12, .r, 0x77);
+            result.place(0x18, .p, 0x60);
+            result.place(0x19, .p, 0x61);
+            result.place(0x1A, .p, 0x62);
+            result.place(0x1B, .p, 0x63);
+            result.place(0x1C, .p, 0x64);
+            result.place(0x1D, .p, 0x65);
+            result.place(0x1E, .p, 0x66);
+            result.place(0x1F, .p, 0x67);
+            break :blk result;
+        };
     }
 
     fn place(self: *Board, id: u5, ptype: PieceType, coord: u8) void {
@@ -523,6 +639,7 @@ const Board = struct {
         self.pieces[id] = ptype;
         self.where[id] = coord;
         self.board[coord] = Place{ .ptype = ptype, .id = id };
+        self.state.hash ^= zhashPiece(getColor(id), ptype, coord);
     }
 
     fn move(self: *Board, m: Move) State {
@@ -552,6 +669,7 @@ const Board = struct {
         }
         self.state = m.state;
         self.active_color = self.active_color.invert();
+        assert(self.state.hash == self.calcHashSlow());
         return result;
     }
 
@@ -638,7 +756,20 @@ const Board = struct {
         result.active_color = try Color.parse(color_str[0]);
 
         result.state = try State.parseParts(result.active_color, castle_str, enpassant_str, no_capture_clock_str, ply_str);
+        result.state.hash = result.calcHashSlow();
 
+        return result;
+    }
+
+    fn calcHashSlow(self: *const Board) u64 {
+        var result: u64 = 0;
+        for (0..32) |i| {
+            const ptype = self.pieces[i];
+            const coord = self.where[i];
+            if (ptype != .none) result ^= zhashPiece(getColor(@truncate(i)), ptype, coord);
+        }
+        result ^= self.state.enpassant;
+        result ^= self.state.castle & any_castle_mask;
         return result;
     }
 
@@ -683,16 +814,16 @@ fn generateStepperMoves(board: *Board, moves: *MoveList, ptype: PieceType, id: u
     }
 }
 
-fn generatePawnMovesMayPromote(board: *Board, moves: *MoveList, isrc: u8, id: u5, src: u8, dest: u8) void {
+fn generatePawnMovesMayPromote(board: *Board, moves: *MoveList, isrc: u8, id: u5, src: u8, dest: u8, comptime has_capture: MoveList.HasCapture) void {
     assert(board.where[id] == src and board.board[src] == Place{ .ptype = .p, .id = id });
     if ((isrc & 0xF0) == 0x60) {
         // promotion
-        moves.addPawnPromotion(board.state, .p, id, src, dest, board.board[dest], .q);
-        moves.addPawnPromotion(board.state, .p, id, src, dest, board.board[dest], .r);
-        moves.addPawnPromotion(board.state, .p, id, src, dest, board.board[dest], .b);
-        moves.addPawnPromotion(board.state, .p, id, src, dest, board.board[dest], .n);
+        moves.addPawnPromotion(board.state, .p, id, src, dest, board.board[dest], .q, has_capture);
+        moves.addPawnPromotion(board.state, .p, id, src, dest, board.board[dest], .r, has_capture);
+        moves.addPawnPromotion(board.state, .p, id, src, dest, board.board[dest], .b, has_capture);
+        moves.addPawnPromotion(board.state, .p, id, src, dest, board.board[dest], .n, has_capture);
     } else {
-        moves.addPawnOne(board.state, .p, id, src, dest, board.board[dest]);
+        moves.addPawnOne(board.state, .p, id, src, dest, board.board[dest], has_capture);
     }
 }
 
@@ -771,12 +902,12 @@ fn generateMovesForPiece(board: *Board, moves: *MoveList, id: u5) void {
                     const capture_coord = ((capture ^ invert) - 0x10) ^ invert;
                     moves.addEnpassant(board.state, .p, id, src, capture_coord, board.board[capture_coord]);
                 } else if (board.board[capture].ptype != .none and getColor(board.board[capture].id) != board.active_color) {
-                    generatePawnMovesMayPromote(board, moves, isrc, id, src, capture);
+                    generatePawnMovesMayPromote(board, moves, isrc, id, src, capture, .capture);
                 }
             }
 
             if (board.board[onestep].ptype == .none) {
-                generatePawnMovesMayPromote(board, moves, isrc, id, src, onestep);
+                generatePawnMovesMayPromote(board, moves, isrc, id, src, onestep, .no_capture);
             }
         },
     }
@@ -987,21 +1118,7 @@ pub fn main() !void {
     while (try input.readUntilDelimiterOrEof(&buffer, '\n')) |line| {
         var it = std.mem.tokenizeAny(u8, line, " \t\r\n");
         if (it.next()) |command| {
-            if (std.mem.eql(u8, command, "quit")) {
-                return;
-            } else if (std.mem.eql(u8, command, "d")) {
-                board.debugPrint();
-            } else if (std.mem.eql(u8, command, "uci")) {
-                try output.print("{s}\n", .{
-                    \\id name Bannou 0.1
-                    \\id author 87 (87flowers.com)
-                    \\uciok
-                });
-            } else if (std.mem.eql(u8, command, "ucinewgame")) {
-                // Clear caches, etc.
-            } else if (std.mem.eql(u8, command, "isready")) {
-                try output.print("readyok\n", .{});
-            } else if (std.mem.eql(u8, command, "position")) {
+            if (std.mem.eql(u8, command, "position")) {
                 const pos_type = it.next() orelse "startpos";
                 if (std.mem.eql(u8, pos_type, "startpos")) {
                     board = Board.defaultBoard();
@@ -1057,6 +1174,23 @@ pub fn main() !void {
                     }
                 }
                 try uciGo(output, &board, tc);
+            } else if (std.mem.eql(u8, command, "isready")) {
+                try output.print("readyok\n", .{});
+            } else if (std.mem.eql(u8, command, "ucinewgame")) {
+                // Clear caches, etc.
+            } else if (std.mem.eql(u8, command, "uci")) {
+                try output.print("{s}\n", .{
+                    \\id name Bannou 0.1
+                    \\id author 87 (87flowers.com)
+                    \\uciok
+                });
+            } else if (std.mem.eql(u8, command, "debug")) {
+                _ = it.next();
+                // TODO: set debug mode based on next argument
+            } else if (std.mem.eql(u8, command, "quit")) {
+                return;
+            } else if (std.mem.eql(u8, command, "d")) {
+                board.debugPrint();
             } else if (std.mem.eql(u8, command, "l.move")) {
                 while (it.next()) |move_str| {
                     const code = MoveCode.parse(move_str) catch {
