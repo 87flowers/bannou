@@ -1123,7 +1123,8 @@ var tt: [tt_size]TTEntry = [_]TTEntry{TTEntry.empty()} ** tt_size;
 pub fn search(board: *Board, alpha: i32, beta: i32, depth: i32) i32 {
     if (depth <= 0) return eval(board);
 
-    const tte = tt[board.state.hash % tt_size];
+    const tt_index = board.state.hash % tt_size;
+    const tte = tt[tt_index];
 
     var moves = MoveList{};
     generateMoves(board, &moves);
@@ -1149,20 +1150,22 @@ pub fn search(board: *Board, alpha: i32, beta: i32, depth: i32) i32 {
     if (best_score == no_moves and !isAttacked(board, board.where[board.active_color.idBase()], board.active_color)) {
         best_score = 0;
     }
-    if (best_score < -1073741824) return best_score + 1;
+    if (best_score < -1073741824) best_score = best_score + 1;
 
-    tt[board.state.hash % tt_size] = .{
-        .hash = board.state.hash,
-        .best_move = best_move,
-        .depth = @intCast(@min(0, depth)),
-        .score = best_score,
-        .bound = if (best_score >= beta)
-            .lower
-        else if (@max(alpha, best_score) == alpha)
-            .upper
-        else
-            .exact,
-    };
+    if (tte.hash != board.state.hash or tte.depth <= depth) {
+        tt[tt_index] = .{
+            .hash = board.state.hash,
+            .best_move = best_move,
+            .depth = @intCast(@min(0, depth)),
+            .score = best_score,
+            .bound = if (best_score >= beta)
+                .lower
+            else if (@max(alpha, best_score) == alpha)
+                .upper
+            else
+                .exact,
+        };
+    }
 
     return best_score;
 }
