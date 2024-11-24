@@ -314,7 +314,16 @@ const MoveList = struct {
     moves: [256]Move = undefined,
     size: u8 = 0,
 
-    pub fn sort(self: *MoveList, pv: MoveCode) void {
+    pub fn sortCaptures(self: *MoveList) void {
+        var sort_scores: [256]u32 = undefined;
+        for (0..self.size) |i| {
+            const m = self.moves[i];
+            sort_scores[i] = 100000 + @as(u32, @intFromEnum(m.capture_place.ptype)) - @as(u32, @intFromEnum(m.src_ptype));
+        }
+        self.sortInOrder(&sort_scores);
+    }
+
+    pub fn sortWithPv(self: *MoveList, pv: MoveCode) void {
         var sort_scores: [256]u32 = undefined;
         for (0..self.size) |i| {
             const m = self.moves[i];
@@ -328,6 +337,10 @@ const MoveList = struct {
                 sort_scores[i] = 0;
             }
         }
+        self.sortInOrder(&sort_scores);
+    }
+
+    fn sortInOrder(self: *MoveList, order: []u32) void {
         const Context = struct {
             ml: *MoveList,
             order: []u32,
@@ -341,12 +354,13 @@ const MoveList = struct {
                 std.mem.swap(u32, &ctx.order[a], &ctx.order[b]);
             }
         };
-        std.sort.heapContext(0, self.size, Context{ .ml = self, .order = &sort_scores });
+        std.sort.heapContext(0, self.size, Context{ .ml = self, .order = order });
     }
 
     const HasCapture = enum { capture, no_capture };
 
-    pub fn add(self: *MoveList, state: State, ptype: PieceType, id: u5, src: u8, dest: u8) void {
+    pub fn add(self: *MoveList, comptime mode: MoveGeneratorMode, state: State, ptype: PieceType, id: u5, src: u8, dest: u8) void {
+        if (mode == .captures_only) return;
         self.moves[self.size] = .{
             .code = MoveCode.make(ptype, src, ptype, dest),
             .id = id,
@@ -375,8 +389,9 @@ const MoveList = struct {
         self.size += 1;
     }
 
-    pub fn addPawnOne(self: *MoveList, state: State, ptype: PieceType, id: u5, src: u8, dest: u8, capture_place: Place, comptime has_capture: HasCapture) void {
+    pub fn addPawnOne(self: *MoveList, comptime mode: MoveGeneratorMode, state: State, ptype: PieceType, id: u5, src: u8, dest: u8, capture_place: Place, comptime has_capture: HasCapture) void {
         assert((has_capture == .capture) != (capture_place == empty_place));
+        if (mode == .captures_only and has_capture != .capture) return;
         self.moves[self.size] = .{
             .code = MoveCode.make(ptype, src, ptype, dest),
             .id = id,
@@ -407,7 +422,8 @@ const MoveList = struct {
         self.size += 1;
     }
 
-    pub fn addPawnTwo(self: *MoveList, state: State, ptype: PieceType, id: u5, src: u8, dest: u8, enpassant: u8) void {
+    pub fn addPawnTwo(self: *MoveList, comptime mode: MoveGeneratorMode, state: State, ptype: PieceType, id: u5, src: u8, dest: u8, enpassant: u8) void {
+        if (mode == .captures_only) return;
         self.moves[self.size] = .{
             .code = MoveCode.make(ptype, src, ptype, dest),
             .id = id,
@@ -434,8 +450,9 @@ const MoveList = struct {
         self.size += 1;
     }
 
-    pub fn addPawnPromotion(self: *MoveList, state: State, src_ptype: PieceType, id: u5, src: u8, dest: u8, capture_place: Place, dest_ptype: PieceType, comptime has_capture: HasCapture) void {
+    pub fn addPawnPromotion(self: *MoveList, comptime mode: MoveGeneratorMode, state: State, src_ptype: PieceType, id: u5, src: u8, dest: u8, capture_place: Place, dest_ptype: PieceType, comptime has_capture: HasCapture) void {
         assert((has_capture == .capture) != (capture_place == empty_place));
+        if (mode == .captures_only and has_capture != .capture) return;
         self.moves[self.size] = .{
             .code = MoveCode.make(src_ptype, src, dest_ptype, dest),
             .id = id,
@@ -468,8 +485,9 @@ const MoveList = struct {
         self.size += 1;
     }
 
-    pub fn addCapture(self: *MoveList, state: State, ptype: PieceType, id: u5, src: u8, dest: u8, capture_place: Place) void {
+    pub fn addCapture(self: *MoveList, comptime mode: MoveGeneratorMode, state: State, ptype: PieceType, id: u5, src: u8, dest: u8, capture_place: Place) void {
         assert(getColor(id).invert() == getColor(capture_place.id));
+        _ = mode;
         self.moves[self.size] = .{
             .code = MoveCode.make(ptype, src, ptype, dest),
             .id = id,
@@ -499,9 +517,10 @@ const MoveList = struct {
         self.size += 1;
     }
 
-    pub fn addEnpassant(self: *MoveList, state: State, ptype: PieceType, id: u5, src: u8, capture_coord: u8, capture_place: Place) void {
+    pub fn addEnpassant(self: *MoveList, comptime mode: MoveGeneratorMode, state: State, ptype: PieceType, id: u5, src: u8, capture_coord: u8, capture_place: Place) void {
         assert(isValidCoord(state.enpassant));
         assert(getColor(id).invert() == getColor(capture_place.id));
+        _ = mode;
         self.moves[self.size] = .{
             .code = MoveCode.make(ptype, src, ptype, state.enpassant),
             .id = id,
@@ -529,7 +548,8 @@ const MoveList = struct {
         self.size += 1;
     }
 
-    pub fn addCastle(self: *MoveList, state: State, rook_id: u5, src_rook: u8, dest_rook: u8, src_king: u8, dest_king: u8) void {
+    pub fn addCastle(self: *MoveList, comptime mode: MoveGeneratorMode, state: State, rook_id: u5, src_rook: u8, dest_rook: u8, src_king: u8, dest_king: u8) void {
+        if (mode == .captures_only) return;
         self.moves[self.size] = .{
             .code = MoveCode.make(.k, src_king, .k, dest_king),
             .id = rook_id,
@@ -849,46 +869,46 @@ const Board = struct {
     }
 };
 
-fn generateSliderMoves(board: *Board, moves: *MoveList, ptype: PieceType, id: u5, src: u8, dirs: anytype) void {
+fn generateSliderMoves(board: *Board, moves: *MoveList, comptime mode: MoveGeneratorMode, ptype: PieceType, id: u5, src: u8, dirs: anytype) void {
     assert(board.where[id] == src and board.board[src] == Place{ .ptype = ptype, .id = id });
     for (dirs) |dir| {
         var dest: u8 = src +% dir;
         while (isValidCoord(dest)) : (dest +%= dir) {
             if (board.board[dest].ptype != .none) {
                 if (getColor(board.board[dest].id) != board.active_color) {
-                    moves.addCapture(board.state, ptype, id, src, dest, board.board[dest]);
+                    moves.addCapture(mode, board.state, ptype, id, src, dest, board.board[dest]);
                 }
                 break;
             }
-            moves.add(board.state, ptype, id, src, dest);
+            moves.add(mode, board.state, ptype, id, src, dest);
         }
     }
 }
 
-fn generateStepperMoves(board: *Board, moves: *MoveList, ptype: PieceType, id: u5, src: u8, dirs: anytype) void {
+fn generateStepperMoves(board: *Board, moves: *MoveList, comptime mode: MoveGeneratorMode, ptype: PieceType, id: u5, src: u8, dirs: anytype) void {
     assert(board.where[id] == src and board.board[src] == Place{ .ptype = ptype, .id = id });
     for (dirs) |dir| {
         const dest = src +% dir;
         if (isValidCoord(dest)) {
             if (board.board[dest].ptype == .none) {
-                moves.add(board.state, ptype, id, src, dest);
+                moves.add(mode, board.state, ptype, id, src, dest);
             } else if (getColor(board.board[dest].id) != board.active_color) {
-                moves.addCapture(board.state, ptype, id, src, dest, board.board[dest]);
+                moves.addCapture(mode, board.state, ptype, id, src, dest, board.board[dest]);
             }
         }
     }
 }
 
-fn generatePawnMovesMayPromote(board: *Board, moves: *MoveList, isrc: u8, id: u5, src: u8, dest: u8, comptime has_capture: MoveList.HasCapture) void {
+fn generatePawnMovesMayPromote(board: *Board, moves: *MoveList, comptime mode: MoveGeneratorMode, isrc: u8, id: u5, src: u8, dest: u8, comptime has_capture: MoveList.HasCapture) void {
     assert(board.where[id] == src and board.board[src] == Place{ .ptype = .p, .id = id });
     if ((isrc & 0xF0) == 0x60) {
         // promotion
-        moves.addPawnPromotion(board.state, .p, id, src, dest, board.board[dest], .q, has_capture);
-        moves.addPawnPromotion(board.state, .p, id, src, dest, board.board[dest], .r, has_capture);
-        moves.addPawnPromotion(board.state, .p, id, src, dest, board.board[dest], .b, has_capture);
-        moves.addPawnPromotion(board.state, .p, id, src, dest, board.board[dest], .n, has_capture);
+        moves.addPawnPromotion(mode, board.state, .p, id, src, dest, board.board[dest], .q, has_capture);
+        moves.addPawnPromotion(mode, board.state, .p, id, src, dest, board.board[dest], .r, has_capture);
+        moves.addPawnPromotion(mode, board.state, .p, id, src, dest, board.board[dest], .b, has_capture);
+        moves.addPawnPromotion(mode, board.state, .p, id, src, dest, board.board[dest], .n, has_capture);
     } else {
-        moves.addPawnOne(board.state, .p, id, src, dest, board.board[dest], has_capture);
+        moves.addPawnOne(mode, board.state, .p, id, src, dest, board.board[dest], has_capture);
     }
 }
 
@@ -912,7 +932,7 @@ fn makeMoveByCode(board: *Board, code: MoveCode) bool {
     if (p == empty_place) return false;
 
     var moves = MoveList{};
-    generateMovesForPiece(board, &moves, p.id);
+    generateMovesForPiece(board, &moves, .any, p.id);
     for (moves.moves) |m| {
         if (std.meta.eql(m.code, code)) {
             _ = board.move(m);
@@ -922,12 +942,12 @@ fn makeMoveByCode(board: *Board, code: MoveCode) bool {
     return false;
 }
 
-fn generateMovesForPiece(board: *Board, moves: *MoveList, id: u5) void {
+fn generateMovesForPiece(board: *Board, moves: *MoveList, comptime mode: MoveGeneratorMode, id: u5) void {
     const src = board.where[id];
     switch (board.pieces[id]) {
         .none => {},
         .k => {
-            generateStepperMoves(board, moves, .k, id, src, all_dir);
+            generateStepperMoves(board, moves, mode, .k, id, src, all_dir);
 
             const rank: u8 = board.active_color.backRank();
             if (board.where[id] == rank | 4) {
@@ -935,21 +955,21 @@ fn generateMovesForPiece(board: *Board, moves: *MoveList, id: u5) void {
                 if (castle_k & board.state.castle == 0 and board.board[rank | 5] == empty_place and board.board[rank | 6] == empty_place) {
                     if (!isAttacked(board, rank | 4, board.active_color) and !isAttacked(board, rank | 5, board.active_color) and !isAttacked(board, rank | 6, board.active_color)) {
                         assert(board.board[rank | 7].ptype == .r and getColor(board.board[rank | 7].id) == board.active_color);
-                        moves.addCastle(board.state, board.board[rank | 7].id, rank | 7, rank | 5, rank | 4, rank | 6);
+                        moves.addCastle(mode, board.state, board.board[rank | 7].id, rank | 7, rank | 5, rank | 4, rank | 6);
                     }
                 }
                 if (castle_q & board.state.castle == 0 and board.board[rank | 1] == empty_place and board.board[rank | 2] == empty_place and board.board[rank | 3] == empty_place) {
                     if (!isAttacked(board, rank | 2, board.active_color) and !isAttacked(board, rank | 3, board.active_color) and !isAttacked(board, rank | 4, board.active_color)) {
                         assert(board.board[rank | 0].ptype == .r and getColor(board.board[rank | 0].id) == board.active_color);
-                        moves.addCastle(board.state, board.board[rank | 0].id, rank | 0, rank | 3, rank | 4, rank | 2);
+                        moves.addCastle(mode, board.state, board.board[rank | 0].id, rank | 0, rank | 3, rank | 4, rank | 2);
                     }
                 }
             }
         },
-        .q => generateSliderMoves(board, moves, .q, id, src, all_dir),
-        .r => generateSliderMoves(board, moves, .r, id, src, ortho_dir),
-        .b => generateSliderMoves(board, moves, .b, id, src, diag_dir),
-        .n => generateStepperMoves(board, moves, .n, id, src, knight_dir),
+        .q => generateSliderMoves(board, moves, mode, .q, id, src, all_dir),
+        .r => generateSliderMoves(board, moves, mode, .r, id, src, ortho_dir),
+        .b => generateSliderMoves(board, moves, mode, .b, id, src, diag_dir),
+        .n => generateStepperMoves(board, moves, mode, .n, id, src, knight_dir),
         .p => {
             const invert = invertIfBlack(board.active_color);
             const isrc = src ^ invert;
@@ -958,31 +978,35 @@ fn generateMovesForPiece(board: *Board, moves: *MoveList, id: u5) void {
             const captures = getPawnCaptures(board.active_color, src);
 
             if ((isrc & 0xF0) == 0x10 and board.board[onestep].ptype == .none and board.board[twostep].ptype == .none) {
-                moves.addPawnTwo(board.state, .p, id, src, twostep, onestep);
+                moves.addPawnTwo(mode, board.state, .p, id, src, twostep, onestep);
             }
 
             for (captures) |capture| {
                 if (!isValidCoord(capture)) continue;
                 if (capture == board.state.enpassant) {
                     const capture_coord = ((capture ^ invert) - 0x10) ^ invert;
-                    moves.addEnpassant(board.state, .p, id, src, capture_coord, board.board[capture_coord]);
+                    moves.addEnpassant(mode, board.state, .p, id, src, capture_coord, board.board[capture_coord]);
                 } else if (board.board[capture].ptype != .none and getColor(board.board[capture].id) != board.active_color) {
-                    generatePawnMovesMayPromote(board, moves, isrc, id, src, capture, .capture);
+                    generatePawnMovesMayPromote(board, moves, mode, isrc, id, src, capture, .capture);
                 }
             }
 
             if (board.board[onestep].ptype == .none) {
-                generatePawnMovesMayPromote(board, moves, isrc, id, src, onestep, .no_capture);
+                generatePawnMovesMayPromote(board, moves, mode, isrc, id, src, onestep, .no_capture);
             }
         },
     }
 }
 
-fn generateMoves(board: *Board, moves: *MoveList) void {
+const MoveGeneratorMode = enum {
+    any,
+    captures_only,
+};
+fn generateMoves(board: *Board, moves: *MoveList, comptime mode: MoveGeneratorMode) void {
     const id_base = board.active_color.idBase();
     for (0..16) |id_index| {
         const id: u5 = @truncate(id_base + id_index);
-        generateMovesForPiece(board, moves, id);
+        generateMovesForPiece(board, moves, mode, id);
     }
 }
 
@@ -1029,7 +1053,7 @@ pub fn perft(board: *Board, depth: usize) usize {
     if (depth == 0) return 1;
     var result: usize = 0;
     var moves = MoveList{};
-    generateMoves(board, &moves);
+    generateMoves(board, &moves, .any);
     for (0..moves.size) |i| {
         const m = moves.moves[i];
         const old_state = board.move(m);
@@ -1046,7 +1070,7 @@ pub fn divide(output: anytype, board: *Board, depth: usize) !void {
     var result: usize = 0;
     var moves = MoveList{};
     var timer = try std.time.Timer.start();
-    generateMoves(board, &moves);
+    generateMoves(board, &moves, .any);
     for (0..moves.size) |i| {
         const m = moves.moves[i];
         const old_state = board.move(m);
@@ -1171,8 +1195,8 @@ pub fn search(board: *Board, timer: *SearchTimer, alpha: i32, beta: i32, depth: 
     }
 
     var moves = MoveList{};
-    generateMoves(board, &moves);
-    moves.sort(tte.best_move);
+    generateMoves(board, &moves, .any);
+    moves.sortWithPv(tte.best_move);
 
     const no_moves = -std.math.maxInt(i32);
     var best_score: i32 = no_moves;
