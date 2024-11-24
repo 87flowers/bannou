@@ -743,6 +743,38 @@ const Board = struct {
         self.active_color = self.active_color.invert();
     }
 
+    fn calcHashSlow(self: *const Board) u64 {
+        var result: u64 = 0;
+        for (0..32) |i| {
+            const ptype = self.pieces[i];
+            const coord = self.where[i];
+            if (ptype != .none) result ^= zhashPiece(getColor(@truncate(i)), ptype, coord);
+        }
+        result ^= self.state.enpassant;
+        result ^= zhashCastle(self.state.castle);
+        if (self.active_color == .black) result ^= zhash_move;
+        return result;
+    }
+
+    pub fn isRepeatedPosition(self: *Board) bool {
+        var i: u16 = self.state.ply - self.state.no_capture_clock;
+        i += @intFromEnum(self.active_color.invert());
+        i &= ~@as(u16, 1);
+        i += @intFromEnum(self.active_color);
+
+        while (i + 4 <= self.state.ply) : (i += 2) {
+            if (self.zhistory[i] == self.state.hash) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    pub fn is50MoveExpired(self: *Board) bool {
+        // TODO: detect if this move is checkmate
+        return self.state.no_capture_clock >= 100;
+    }
+
     pub fn format(self: Board, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
         var blanks: u32 = 0;
         for (0..64) |i| {
@@ -803,19 +835,6 @@ const Board = struct {
         result.state = try State.parseParts(result.active_color, castle_str, enpassant_str, no_capture_clock_str, ply_str);
         result.state.hash = result.calcHashSlow();
 
-        return result;
-    }
-
-    fn calcHashSlow(self: *const Board) u64 {
-        var result: u64 = 0;
-        for (0..32) |i| {
-            const ptype = self.pieces[i];
-            const coord = self.where[i];
-            if (ptype != .none) result ^= zhashPiece(getColor(@truncate(i)), ptype, coord);
-        }
-        result ^= self.state.enpassant;
-        result ^= zhashCastle(self.state.castle);
-        if (self.active_color == .black) result ^= zhash_move;
         return result;
     }
 
@@ -1045,27 +1064,6 @@ pub fn divide(output: anytype, board: *Board, depth: usize) !void {
 
 const rand = std.crypto.random;
 pub fn eval(board: *Board) i32 {
-    // detect repetition
-    {
-        const zcurrent = board.state.hash;
-
-        var i: u16 = board.state.ply - board.state.no_capture_clock;
-        i += @intFromEnum(board.active_color.invert());
-        i &= ~@as(u16, 1);
-        i += @intFromEnum(board.active_color);
-
-        while (i + 4 <= board.state.ply) : (i += 2) {
-            if (board.zhistory[i] == zcurrent) {
-                return 0;
-            }
-        }
-    }
-    // detect 50 move rule
-    if (board.state.no_capture_clock >= 100) {
-        // TODO: detect if this move is checkmate
-        return 0;
-    }
-
     var score: i32 = 0;
     for (0..16) |w| {
         score += switch (board.pieces[w]) {
@@ -1151,6 +1149,10 @@ const SearchTimer = struct {
 const SearchError = error {
     OutOfTime,
 };
+pub fn search2(board: *Board, timer: *SearchTimer, alpha: i32, beta: i32, depth: i32) SearchError!i32 {
+    _, const score = try search(board, timer, alpha, beta, depth);
+    return score;
+}
 pub fn search(board: *Board, timer: *SearchTimer, alpha: i32, beta: i32, depth: i32) SearchError!struct { ?MoveCode, i32 } {
     if (depth <= 0) return .{ null, eval(board) };
     if (depth > 3 and timer.hardExpired()) return SearchError.OutOfTime;
@@ -1181,8 +1183,10 @@ pub fn search(board: *Board, timer: *SearchTimer, alpha: i32, beta: i32, depth: 
         const old_state = board.move(m);
         defer board.unmove(m, old_state);
         if (!isAttacked(board, board.where[board.active_color.invert().idBase()], board.active_color.invert())) {
-            _, const neg_child_score = try search(board, timer, -beta, -@max(alpha, best_score), depth - 1);
-            const child_score = -neg_child_score;
+            const child_score = if (board.isRepeatedPosition() or board.is50MoveExpired())
+                0
+            else
+                -try search2(board, timer, -beta, -@max(alpha, best_score), depth - 1);
             if (child_score > best_score) {
                 best_score = child_score;
                 best_move = m.code;
@@ -1330,7 +1334,7 @@ pub fn main() !void {
                 @memset(&tt, TTEntry.empty());
             } else if (std.mem.eql(u8, command, "uci")) {
                 try output.print("{s}\n", .{
-                    \\id name Bannou 0.5
+                    \\id name Bannou 0.6
                     \\id author 87 (87flowers.com)
                     \\uciok
                 });
