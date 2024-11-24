@@ -1178,8 +1178,7 @@ pub fn search2(board: *Board, timer: *SearchTimer, alpha: i32, beta: i32, depth:
     return score;
 }
 pub fn search(board: *Board, timer: *SearchTimer, alpha: i32, beta: i32, depth: i32) SearchError!struct { ?MoveCode, i32 } {
-    if (depth <= 0) return .{ null, eval(board) };
-    if (depth > 3 and timer.hardExpired()) return SearchError.OutOfTime;
+    if (timer.hardExpired()) return SearchError.OutOfTime;
 
     const tt_index = board.state.hash % tt_size;
     const tte = tt[tt_index];
@@ -1195,11 +1194,15 @@ pub fn search(board: *Board, timer: *SearchTimer, alpha: i32, beta: i32, depth: 
     }
 
     var moves = MoveList{};
-    generateMoves(board, &moves, .any);
+    if (depth > 0) {
+        generateMoves(board, &moves, .any);
+    } else {
+        generateMoves(board, &moves, .captures_only);
+    }
     moves.sortWithPv(tte.best_move);
 
     const no_moves = -std.math.maxInt(i32);
-    var best_score: i32 = no_moves;
+    var best_score: i32 = if (depth > 0) no_moves else eval(board);
     var best_move: MoveCode = tte.best_move;
 
     for (0..moves.size) |i| {
@@ -1358,7 +1361,7 @@ pub fn main() !void {
                 @memset(&tt, TTEntry.empty());
             } else if (std.mem.eql(u8, command, "uci")) {
                 try output.print("{s}\n", .{
-                    \\id name Bannou 0.6
+                    \\id name Bannou 0.7
                     \\id author 87 (87flowers.com)
                     \\uciok
                 });
