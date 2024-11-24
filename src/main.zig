@@ -122,12 +122,20 @@ const SearchTimer = struct {
 const SearchError = error{
     OutOfTime,
 };
-pub fn search2(board: *Board, timer: *SearchTimer, alpha: i32, beta: i32, depth: i32) SearchError!i32 {
-    _, const score = try search(board, timer, alpha, beta, depth);
+const SearchMode = enum { normal, quiescence };
+pub fn search2(board: *Board, timer: *SearchTimer, alpha: i32, beta: i32, depth: i32, comptime mode: SearchMode) SearchError!i32 {
+    _, const score = if (mode == .normal and depth <= 0)
+        try search(board, timer, alpha, beta, depth, .quiescence)
+    else
+        try search(board, timer, alpha, beta, depth, mode);
     return score;
 }
-pub fn search(board: *Board, timer: *SearchTimer, alpha: i32, beta: i32, depth: i32) SearchError!struct { ?MoveCode, i32 } {
+pub fn search(board: *Board, timer: *SearchTimer, alpha: i32, beta: i32, depth: i32, comptime mode: SearchMode) SearchError!struct { ?MoveCode, i32 } {
     if (timer.hardExpired()) return SearchError.OutOfTime;
+
+    // Preconditions for optimizer to be aware of.
+    if (mode == .normal) assert(depth > 0);
+    if (mode == .quiescence) assert(depth <= 0);
 
     const tt_index = board.state.hash % tt_size;
     const tte = tt[tt_index];
@@ -142,17 +150,22 @@ pub fn search(board: *Board, timer: *SearchTimer, alpha: i32, beta: i32, depth: 
         }
     }
 
+    const no_moves = -std.math.maxInt(i32);
+    var best_score: i32 = switch (mode) {
+        .normal => no_moves,
+        .quiescence => eval(board),
+    };
+    var best_move: MoveCode = tte.best_move;
+
+    // Check stand-pat score for beta cut-off (avoid move generation)
+    if (mode == .quiescence and best_score >= beta) return .{ null, best_score };
+
     var moves = MoveList{};
-    if (depth > 0) {
-        moves.generateMoves(board, .any);
-    } else {
-        moves.generateMoves(board, .captures_only);
+    switch (mode) {
+        .normal => moves.generateMoves(board, .any),
+        .quiescence => moves.generateMoves(board, .captures_only),
     }
     moves.sortWithPv(tte.best_move);
-
-    const no_moves = -std.math.maxInt(i32);
-    var best_score: i32 = if (depth > 0) no_moves else eval(board);
-    var best_move: MoveCode = tte.best_move;
 
     for (0..moves.size) |i| {
         const m = moves.moves[i];
@@ -162,7 +175,7 @@ pub fn search(board: *Board, timer: *SearchTimer, alpha: i32, beta: i32, depth: 
             const child_score = if (board.isRepeatedPosition() or board.is50MoveExpired())
                 0
             else
-                -try search2(board, timer, -beta, -@max(alpha, best_score), depth - 1);
+                -try search2(board, timer, -beta, -@max(alpha, best_score), depth - 1, mode);
             if (child_score > best_score) {
                 best_score = child_score;
                 best_move = m.code;
@@ -221,7 +234,7 @@ pub fn uciGo(output: anytype, board: *Board, tc: TimeControl) !void {
     var depth: i32 = 1;
     var rootmove: ?MoveCode = null;
     while (true) : (depth += 1) {
-        rootmove, const score = search(board, &timer, -std.math.maxInt(i32), std.math.maxInt(i32), depth) catch {
+        rootmove, const score = search(board, &timer, -std.math.maxInt(i32), std.math.maxInt(i32), depth, .normal) catch {
             try output.print("info depth {} time {} pv {?} string [hard timeout, deadline = {}]\n", .{ depth, timer.read() / 1_000_000, rootmove, deadline });
             break;
         };
@@ -229,12 +242,7 @@ pub fn uciGo(output: anytype, board: *Board, tc: TimeControl) !void {
         if (timer.softExpired()) break;
         if (rootmove == null) break;
     }
-    if (rootmove) |rm| {
-        try output.print("bestmove {}\n", .{rm});
-    } else {
-        try output.print("info string Error: No moves found in position\n", .{});
-        try output.print("bestmove null\n", .{});
-    }
+    try output.print("bestmove {?}\n", .{rootmove});
 }
 
 pub fn main() !void {
@@ -309,7 +317,7 @@ pub fn main() !void {
                 @memset(&tt, TTEntry.empty());
             } else if (std.mem.eql(u8, command, "uci")) {
                 try output.print("{s}\n", .{
-                    \\id name Bannou 0.7
+                    \\id name Bannou 0.8
                     \\id author 87 (87flowers.com)
                     \\uciok
                 });
@@ -342,7 +350,7 @@ pub fn main() !void {
                 const str = it.next() orelse continue;
                 const depth = std.fmt.parseInt(i32, str, 10) catch continue;
                 var timer = SearchTimer.dummy();
-                try output.print("{any}\n", .{try search(&board, &timer, -std.math.maxInt(i32), std.math.maxInt(i32), depth)});
+                try output.print("{any}\n", .{try search(&board, &timer, -std.math.maxInt(i32), std.math.maxInt(i32), depth, .normal)});
             } else if (std.mem.eql(u8, command, "l.eval")) {
                 try output.print("{}\n", .{eval(&board)});
             } else if (std.mem.eql(u8, command, "l.history")) {
@@ -353,7 +361,7 @@ pub fn main() !void {
                 const str = it.next() orelse continue;
                 const depth = std.fmt.parseInt(i32, str, 10) catch continue;
                 var timer = SearchTimer.dummy();
-                const bm = try search(&board, &timer, -std.math.maxInt(i32), std.math.maxInt(i32), depth);
+                const bm = try search(&board, &timer, -std.math.maxInt(i32), std.math.maxInt(i32), depth, .normal);
                 try output.print("{any}\n", .{bm});
                 if (bm[0]) |m| {
                     _ = board.makeMoveByCode(m);
