@@ -1170,7 +1170,7 @@ const SearchTimer = struct {
         return self.deadline / 2 <= self.timer.read();
     }
 };
-const SearchError = error {
+const SearchError = error{
     OutOfTime,
 };
 pub fn search2(board: *Board, timer: *SearchTimer, alpha: i32, beta: i32, depth: i32) SearchError!i32 {
@@ -1271,13 +1271,12 @@ pub fn uciGo(output: anytype, board: *Board, tc: TimeControl) !void {
 
     var depth: i32 = 1;
     var rootmove: ?MoveCode = null;
-    try output.print("info string pos {}\n", .{board});
     while (true) : (depth += 1) {
         rootmove, const score = search(board, &timer, -std.math.maxInt(i32), std.math.maxInt(i32), depth) catch {
-            try output.print("info string depth {} (partial) move {any} time {} [hard expired, deadline = {}]\n", .{ depth, rootmove, timer.read() / 1_000_000, deadline / 1_000_000 });
+            try output.print("info depth {} time {} pv {?} string [hard timeout, deadline = {}]\n", .{ depth, timer.read() / 1_000_000, rootmove, deadline });
             break;
         };
-        try output.print("info string depth {} move {any} score {} time {}\n", .{ depth, rootmove, score, timer.read() / 1_000_000 });
+        try output.print("info depth {} score cp {} time {} pv {?}\n", .{ depth, score, timer.read() / 1_000_000, rootmove });
         if (timer.softExpired()) break;
         if (rootmove == null) break;
     }
