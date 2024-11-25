@@ -179,8 +179,8 @@ pub fn search(board: *Board, info: *SearchInfo, alpha: i32, beta: i32, depth: i3
             if (child_score > best_score) {
                 best_score = child_score;
                 best_move = m.code;
+                if (child_score >= beta) break;
             }
-            if (best_score >= beta) break;
         }
     }
 
@@ -317,7 +317,7 @@ pub fn main() !void {
                 @memset(&tt, TTEntry.empty());
             } else if (std.mem.eql(u8, command, "uci")) {
                 try output.print("{s}\n", .{
-                    \\id name Bannou 0.10
+                    \\id name Bannou 0.11
                     \\id author 87 (87flowers.com)
                     \\uciok
                 });
