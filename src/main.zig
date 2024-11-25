@@ -91,31 +91,31 @@ test {
 const tt_size = 0x1000000;
 var tt: [tt_size]TTEntry = [_]TTEntry{TTEntry.empty()} ** tt_size;
 
-const SearchTimer = struct {
+const SearchInfo = struct {
     timer: std.time.Timer,
     deadline: u64,
     safe_time_remaining: u64,
-    pub fn init(deadline: u64, safe_time_remaining: u64) SearchTimer {
+    pub fn init(deadline: u64, safe_time_remaining: u64) SearchInfo {
         return .{
             .timer = std.time.Timer.start() catch unreachable,
             .deadline = deadline,
             .safe_time_remaining = safe_time_remaining,
         };
     }
-    pub fn dummy() SearchTimer {
+    pub fn dummy() SearchInfo {
         return .{
             .timer = std.time.Timer.start() catch unreachable,
             .deadline = std.math.maxInt(u64),
             .safe_time_remaining = std.math.maxInt(u64),
         };
     }
-    pub fn read(self: *SearchTimer) u64 {
+    pub fn read(self: *SearchInfo) u64 {
         return self.timer.read();
     }
-    pub fn hardExpired(self: *SearchTimer) bool {
+    pub fn hardExpired(self: *SearchInfo) bool {
         return self.safe_time_remaining / 2 <= self.timer.read();
     }
-    pub fn softExpired(self: *SearchTimer) bool {
+    pub fn softExpired(self: *SearchInfo) bool {
         return self.deadline / 2 <= self.timer.read();
     }
 };
@@ -123,19 +123,19 @@ const SearchError = error{
     OutOfTime,
 };
 const SearchMode = enum { normal, quiescence };
-pub fn search2(board: *Board, timer: *SearchTimer, alpha: i32, beta: i32, depth: i32, comptime mode: SearchMode) SearchError!i32 {
+pub fn search2(board: *Board, info: *SearchInfo, alpha: i32, beta: i32, depth: i32, comptime mode: SearchMode) SearchError!i32 {
     _, const score = if (mode == .normal and depth <= 0)
-        try search(board, timer, alpha, beta, depth, .quiescence)
+        try search(board, info, alpha, beta, depth, .quiescence)
     else
-        try search(board, timer, alpha, beta, depth, mode);
+        try search(board, info, alpha, beta, depth, mode);
     return score;
 }
-pub fn search(board: *Board, timer: *SearchTimer, alpha: i32, beta: i32, depth: i32, comptime mode: SearchMode) SearchError!struct { ?MoveCode, i32 } {
+pub fn search(board: *Board, info: *SearchInfo, alpha: i32, beta: i32, depth: i32, comptime mode: SearchMode) SearchError!struct { ?MoveCode, i32 } {
     // Preconditions for optimizer to be aware of.
     if (mode == .normal) assert(depth > 0);
     if (mode == .quiescence) assert(depth <= 0);
 
-    if (depth > 3 and timer.hardExpired()) return SearchError.OutOfTime;
+    if (depth > 3 and info.hardExpired()) return SearchError.OutOfTime;
 
     const tt_index = board.state.hash % tt_size;
     const tte = tt[tt_index];
@@ -175,7 +175,7 @@ pub fn search(board: *Board, timer: *SearchTimer, alpha: i32, beta: i32, depth: 
             const child_score = if (board.isRepeatedPosition() or board.is50MoveExpired())
                 0
             else
-                -try search2(board, timer, -beta, -@max(alpha, best_score), depth - 1, mode);
+                -try search2(board, info, -beta, -@max(alpha, best_score), depth - 1, mode);
             if (child_score > best_score) {
                 best_score = child_score;
                 best_move = m.code;
@@ -229,17 +229,17 @@ pub fn uciGo(output: anytype, board: *Board, tc: TimeControl) !void {
     };
     const safe_time_remaining = (@max(time_remaining, margin) - margin) * 1_000_000; // nanoseconds
     const deadline = safe_time_remaining / movestogo; // nanoseconds
-    var timer = SearchTimer.init(deadline, safe_time_remaining);
+    var info = SearchInfo.init(deadline, safe_time_remaining);
 
     var depth: i32 = 1;
     var rootmove: ?MoveCode = null;
     while (true) : (depth += 1) {
-        rootmove, const score = search(board, &timer, -std.math.maxInt(i32), std.math.maxInt(i32), depth, .normal) catch {
-            try output.print("info depth {} time {} pv {?} string [hard timeout, deadline = {}]\n", .{ depth, timer.read() / 1_000_000, rootmove, deadline });
+        rootmove, const score = search(board, &info, -std.math.maxInt(i32), std.math.maxInt(i32), depth, .normal) catch {
+            try output.print("info depth {} time {} pv {?} string [hard timeout, deadline = {}]\n", .{ depth, info.read() / 1_000_000, rootmove, deadline });
             break;
         };
-        try output.print("info depth {} score cp {} time {} pv {?}\n", .{ depth, score, timer.read() / 1_000_000, rootmove });
-        if (timer.softExpired()) break;
+        try output.print("info depth {} score cp {} time {} pv {?}\n", .{ depth, score, info.read() / 1_000_000, rootmove });
+        if (info.softExpired()) break;
         if (rootmove == null) break;
     }
     try output.print("bestmove {?}\n", .{rootmove});
@@ -349,8 +349,8 @@ pub fn main() !void {
             } else if (std.mem.eql(u8, command, "l.bestmove")) {
                 const str = it.next() orelse continue;
                 const depth = std.fmt.parseInt(i32, str, 10) catch continue;
-                var timer = SearchTimer.dummy();
-                try output.print("{any}\n", .{try search(&board, &timer, -std.math.maxInt(i32), std.math.maxInt(i32), depth, .normal)});
+                var info = SearchInfo.dummy();
+                try output.print("{any}\n", .{try search(&board, &info, -std.math.maxInt(i32), std.math.maxInt(i32), depth, .normal)});
             } else if (std.mem.eql(u8, command, "l.eval")) {
                 try output.print("{}\n", .{eval(&board)});
             } else if (std.mem.eql(u8, command, "l.history")) {
@@ -360,8 +360,8 @@ pub fn main() !void {
             } else if (std.mem.eql(u8, command, "l.auto")) {
                 const str = it.next() orelse continue;
                 const depth = std.fmt.parseInt(i32, str, 10) catch continue;
-                var timer = SearchTimer.dummy();
-                const bm = try search(&board, &timer, -std.math.maxInt(i32), std.math.maxInt(i32), depth, .normal);
+                var info = SearchInfo.dummy();
+                const bm = try search(&board, &info, -std.math.maxInt(i32), std.math.maxInt(i32), depth, .normal);
                 try output.print("{any}\n", .{bm});
                 if (bm[0]) |m| {
                     _ = board.makeMoveByCode(m);
