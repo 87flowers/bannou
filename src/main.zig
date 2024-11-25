@@ -131,11 +131,11 @@ pub fn search2(board: *Board, timer: *SearchTimer, alpha: i32, beta: i32, depth:
     return score;
 }
 pub fn search(board: *Board, timer: *SearchTimer, alpha: i32, beta: i32, depth: i32, comptime mode: SearchMode) SearchError!struct { ?MoveCode, i32 } {
-    if (timer.hardExpired()) return SearchError.OutOfTime;
-
     // Preconditions for optimizer to be aware of.
     if (mode == .normal) assert(depth > 0);
     if (mode == .quiescence) assert(depth <= 0);
+
+    if (depth > 3 and timer.hardExpired()) return SearchError.OutOfTime;
 
     const tt_index = board.state.hash % tt_size;
     const tte = tt[tt_index];
@@ -317,7 +317,7 @@ pub fn main() !void {
                 @memset(&tt, TTEntry.empty());
             } else if (std.mem.eql(u8, command, "uci")) {
                 try output.print("{s}\n", .{
-                    \\id name Bannou 0.9
+                    \\id name Bannou 0.10
                     \\id author 87 (87flowers.com)
                     \\uciok
                 });
