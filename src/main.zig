@@ -35,7 +35,6 @@ pub fn divide(output: anytype, board: *Board, depth: usize) !void {
     try output.print("Search completed in {d:.1}ms\n", .{elapsed / std.time.ns_per_ms});
 }
 
-const rand = std.crypto.random;
 pub fn eval(board: *Board) i32 {
     var score: i32 = 0;
     for (0..16) |w| {
@@ -60,7 +59,8 @@ pub fn eval(board: *Board) i32 {
             .p => -100,
         };
     }
-    score += rand.intRangeAtMostBiased(i32, -20, 20);
+    const fudge = @as(i32, @intCast(board.state.hash & 0x1f)) - 0xf;
+    score += fudge;
     return switch (board.active_color) {
         .white => score,
         .black => -score,
@@ -317,7 +317,7 @@ pub fn main() !void {
                 @memset(&tt, TTEntry.empty());
             } else if (std.mem.eql(u8, command, "uci")) {
                 try output.print("{s}\n", .{
-                    \\id name Bannou 0.11
+                    \\id name Bannou 0.12
                     \\id author 87 (87flowers.com)
                     \\uciok
                 });
