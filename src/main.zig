@@ -185,7 +185,7 @@ pub fn search(board: *Board, info: *SearchInfo, alpha: i32, beta: i32, depth: i3
     }
 
     if (best_score == no_moves) {
-        if (!board.isAttacked(board.where[board.active_color.idBase()], board.active_color)) {
+        if (!board.isInCheck()) {
             return .{ null, 0 };
         } else {
             return .{ null, no_moves + 1 };

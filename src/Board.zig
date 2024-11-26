@@ -155,6 +155,11 @@ pub fn isValid(self: *Board) bool {
     return !self.isAttacked(self.where[king_id], move_color);
 }
 
+pub fn isInCheck(self: *Board) bool {
+    const king_id = self.active_color.idBase();
+    return self.isAttacked(self.where[king_id], self.active_color);
+}
+
 pub fn isAttacked(self: *Board, target: u8, friendly: Color) bool {
     const enemy_color = friendly.invert();
     const id_base = enemy_color.idBase();
