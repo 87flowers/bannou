@@ -147,6 +147,23 @@ pub fn unmove(self: *Board, m: Move, old_state: State) void {
     self.active_color = self.active_color.invert();
 }
 
+pub fn moveNull(self: *Board) State {
+    const result = self.state;
+    self.state.hash ^= zhash.move ^ @as(u64, self.state.enpassant) ^ 0xFF;
+    self.state.enpassant = 0xFF;
+    self.state.no_capture_clock += 1;
+    self.state.ply += 1;
+    self.active_color = self.active_color.invert();
+    self.zhistory[self.state.ply] = self.state.hash;
+    assert(self.state.hash == self.calcHashSlow());
+    return result;
+}
+
+pub fn unmoveNull(self: *Board, old_state: State) void {
+    self.state = old_state;
+    self.active_color = self.active_color.invert();
+}
+
 /// This MUST be checked after making a move on the board.
 pub fn isValid(self: *Board) bool {
     // Ensure player that just made a move is not in check!

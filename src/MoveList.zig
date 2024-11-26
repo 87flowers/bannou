@@ -87,10 +87,10 @@ pub fn sortWithPv(self: *MoveList, pv: MoveCode) void {
     self.sortInOrder(&sort_scores);
 }
 
-fn sortInOrder(self: *MoveList, order: []u32) void {
+fn sortInOrder(self: *MoveList, order: []i32) void {
     const Context = struct {
         ml: *MoveList,
-        order: []u32,
+        order: []i32,
 
         pub fn lessThan(ctx: @This(), a: usize, b: usize) bool {
             return ctx.order[a] > ctx.order[b];
@@ -98,7 +98,7 @@ fn sortInOrder(self: *MoveList, order: []u32) void {
 
         pub fn swap(ctx: @This(), a: usize, b: usize) void {
             std.mem.swap(Move, &ctx.ml.moves[a], &ctx.ml.moves[b]);
-            std.mem.swap(u32, &ctx.order[a], &ctx.order[b]);
+            std.mem.swap(i32, &ctx.order[a], &ctx.order[b]);
         }
     };
     std.sort.heapContext(0, self.size, Context{ .ml = self, .order = order });
