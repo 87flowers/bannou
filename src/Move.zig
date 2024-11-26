@@ -9,7 +9,11 @@ capture_place: Place,
 state: State,
 mtype: MoveType,
 
-pub fn format(self: Move, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+fn isCapture(self: *Move) bool {
+    return capture_place != Place.empty;
+}
+
+pub fn format(self: *Move, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
     try writer.print("{}", .{self.code});
 }
 

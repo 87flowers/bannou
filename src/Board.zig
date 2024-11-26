@@ -79,7 +79,7 @@ pub fn move(self: *Board, m: Move) State {
     const result = self.state;
     switch (m.mtype) {
         .normal => {
-            if (m.capture_place != Place.empty) {
+            if (m.isCapture()) {
                 assert(self.pieces[m.capture_place.id] == m.capture_place.ptype);
                 assert(self.board[m.capture_coord] == m.capture_place);
                 self.pieces[m.capture_place.id] = .none;
@@ -126,7 +126,7 @@ pub fn unmove(self: *Board, m: Move, old_state: State) void {
     switch (m.mtype) {
         .normal => {
             self.board[m.dest_coord] = Place.empty;
-            if (m.capture_place != Place.empty) {
+            if (m.isCapture()) {
                 self.pieces[m.capture_place.id] = m.capture_place.ptype;
                 self.board[m.capture_coord] = m.capture_place;
             }

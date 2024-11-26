@@ -75,18 +75,14 @@ pub fn generateMovesForPiece(self: *MoveList, board: *Board, comptime mode: Move
 }
 
 pub fn sortWithPv(self: *MoveList, pv: MoveCode) void {
-    var sort_scores: [256]u32 = undefined;
+    var sort_scores: [256]i32 = undefined;
     for (0..self.size) |i| {
         const m = self.moves[i];
-        if (m.code.code == pv.code) {
-            sort_scores[i] = std.math.maxInt(u32);
-            continue;
-        }
-        if (m.capture_place != Place.empty) {
-            sort_scores[i] = 100000 + @as(u32, @intFromEnum(m.capture_place.ptype)) - @as(u32, @intFromEnum(m.src_ptype));
-        } else {
-            sort_scores[i] = 0;
-        }
+        sort_scores[i] = blk: {
+            if (m.code.code == pv.code) break :blk std.math.maxInt(i32);
+            if (m.isCapture()) break :blk 100000 + @as(i32, @intFromEnum(m.capture_place.ptype)) - @as(i32, @intFromEnum(m.src_ptype));
+            break :blk 0;
+        };
     }
     self.sortInOrder(&sort_scores);
 }
