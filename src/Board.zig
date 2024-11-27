@@ -122,6 +122,142 @@ pub fn makeMoveByCode(self: *Board, code: MoveCode) bool {
     return false;
 }
 
+pub fn makeMoveByPgnCode(self: *Board, pgn_arg: []const u8) bool {
+    if (pgn_arg.len < 2) return false;
+    const pgn = switch (pgn_arg[pgn_arg.len - 1]) {
+        '#', '+' => pgn_arg[0..pgn_arg.len - 1],
+        else => pgn_arg,
+    };
+    if (pgn.len < 2) return false;
+
+    if (std.mem.eql(u8, pgn, "O-O")) {
+        if (self.board[self.active_color.backRank() | 4].ptype != .k) return false;
+        switch (self.active_color) {
+            .white => return self.makeMoveByCode(MoveCode.parse("e1g1") catch unreachable),
+            .black => return self.makeMoveByCode(MoveCode.parse("e8g8") catch unreachable),
+        }
+    }
+
+    if (std.mem.eql(u8, pgn, "O-O-O")) {
+        if (self.board[self.active_color.backRank() | 4].ptype != .k) return false;
+        switch (self.active_color) {
+            .white => return self.makeMoveByCode(MoveCode.parse("e1c1") catch unreachable),
+            .black => return self.makeMoveByCode(MoveCode.parse("e8c8") catch unreachable),
+        }
+    }
+
+    const dest = coord.fromString(pgn[pgn.len - 2..][0..2].*) catch return false;
+
+    if (pgn.len == 2 or (pgn.len == 3 and pgn[0] == 'P')) {
+        for ([2]u8{ 1, 2 }) |i| {
+            const delta = switch (self.active_color) {
+                .white => 0xF0 *% i,
+                .black => 0x10 *% i,
+            };
+            const src = dest +% delta;
+            if (!coord.isValid(src)) return false;
+            if (self.board[src].ptype == .p) return self.makeMoveByCode(MoveCode.make(.p, src, .p, dest));
+        }
+        return false;
+    }
+
+    if (pgn.len < 3) return false;
+
+    const is_capture = pgn[pgn.len - 3] == 'x';
+    const ptype: PieceType, const expected: u8, const mask: u8 = switch (pgn.len - 2 - @intFromBool(is_capture)) {
+        1 => blk: {
+            const maybe_ptype = PieceType.parse(pgn[0]) catch null;
+            if (maybe_ptype) |pt| break :blk .{ pt[0], 0, 0 };
+            const maybe_file: ?u8 = coord.fileFromChar(pgn[0]) catch null;
+            if (maybe_file) |file| break :blk .{ .p, file, 0x07 };
+            return false;
+        },
+        2 => blk: {
+            const pt = PieceType.parse(pgn[0]) catch return false;
+            const maybe_file: ?u8 = coord.fileFromChar(pgn[1]) catch null;
+            if (maybe_file) |file| break :blk .{ pt[0], file, 0x07 };
+            const maybe_rank: ?u8 = coord.rankFromChar(pgn[1]) catch null;
+            if (maybe_rank) |rank| break :blk .{ pt[0], rank, 0x70 };
+            return false;
+        },
+        3 => blk: {
+            const pt = PieceType.parse(pgn[0]) catch return false;
+            const src = coord.fromString(pgn[1..3].*) catch return false;
+            break :blk .{ pt[0], src, 0xFF };
+        },
+        else => return false,
+    };
+
+    const id_base = self.active_color.idBase();
+    for (0..32) |id_index| {
+        const id: u5 = @truncate(id_base + id_index);
+        if (self.pieces[id] != ptype) continue;
+        if (self.where[id] & mask != expected) continue;
+
+        var moves = MoveList{};
+        moves.generateMovesForPiece(self, .any, id);
+        for (moves.moves) |m| {
+            if (m.code.dest() == dest) {
+                _ = self.move(m);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+test {
+    var board = Board.defaultBoard();
+    const moves = [_][]const u8 {
+        "e4", "c5",
+        "Nf3", "e6",
+        "d4", "cxd4",
+        "Nxd4", "Nc6",
+        "Nb5", "d6",
+        "c4", "Nf6",
+        "N1c3", "a6",
+        "Na3", "d5",
+        "cxd5", "exd5",
+        "exd5", "Nb4",
+        "Be2", "Bc5",
+        "O-O", "O-O",
+        "Bf3", "Bf5",
+        "Bg5", "Re8",
+        "Qd2", "b5",
+        "Rad1", "Nd3",
+        "Nab1", "h6",
+        "Bh4", "b4",
+        "Na4", "Bd6",
+        "Bg3", "Rc8",
+        "b3", "g5",
+        "Bxd6", "Qxd6",
+        "g3", "Nd7",
+        "Bg2", "Qf6",
+        "a3", "a5",
+        "axb4", "axb4",
+        "Qa2", "Bg6",
+        "d6", "g4",
+        "Qd2", "Kg7",
+        "f3", "Qxd6",
+        "fxg4", "Qd4+",
+        "Kh1", "Nf6",
+        "Rf4", "Ne4",
+        "Qxd3", "Nf2+",
+        "Rxf2", "Bxd3",
+        "Rfd2", "Qe3",
+        "Rxd3", "Rc1",
+        "Nb2", "Qf2",
+        "Nd2", "Rxd1+",
+        "Nxd1", "Re1+",
+    };
+    for (moves) |m| {
+        try std.testing.expect(board.makeMoveByPgnCode(m));
+    }
+    var tmp: [50]u8 = undefined;
+    const fen = try std.fmt.bufPrint(&tmp, "{}", .{board});
+    try std.testing.expectEqualStrings("8/5pk1/7p/8/1p4P1/1P1R2P1/3N1qBP/3Nr2K w - - 1 41", fen);
+}
+
 pub fn unmove(self: *Board, m: Move, old_state: State) void {
     switch (m.mtype) {
         .normal => {

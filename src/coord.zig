@@ -3,9 +3,17 @@ pub fn toString(coord: u8) [2]u8 {
 }
 
 pub fn fromString(str: [2]u8) ParseError!u8 {
-    if (str[0] < 'a' or str[0] > 'h') return ParseError.InvalidChar;
-    if (str[1] < '1' or str[1] > '8') return ParseError.InvalidChar;
-    return (str[0] - 'a') + ((str[1] - '1') << 4);
+    return try fileFromChar(str[0]) + try rankFromChar(str[1]);
+}
+
+pub fn fileFromChar(ch: u8) ParseError!u8 {
+    if (ch < 'a' or ch > 'h') return ParseError.InvalidChar;
+    return ch - 'a';
+}
+
+pub fn rankFromChar(ch: u8) ParseError!u8 {
+    if (ch < '1' or ch > '8') return ParseError.InvalidChar;
+    return (ch - '1') << 4;
 }
 
 test toString {
