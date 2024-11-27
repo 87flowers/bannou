@@ -1,40 +1,3 @@
-pub fn perft(board: *Board, depth: usize) usize {
-    if (depth == 0) return 1;
-    var result: usize = 0;
-    var moves = MoveList{};
-    moves.generateMoves(board, .any);
-    for (0..moves.size) |i| {
-        const m = moves.moves[i];
-        const old_state = board.move(m);
-        if (board.isValid()) {
-            result += perft(board, depth - 1);
-        }
-        board.unmove(m, old_state);
-    }
-    return result;
-}
-
-pub fn divide(output: anytype, board: *Board, depth: usize) !void {
-    if (depth == 0) return;
-    var result: usize = 0;
-    var moves = MoveList{};
-    var timer = try std.time.Timer.start();
-    moves.generateMoves(board, .any);
-    for (0..moves.size) |i| {
-        const m = moves.moves[i];
-        const old_state = board.move(m);
-        if (board.isValid()) {
-            const p = perft(board, depth - 1);
-            result += p;
-            try output.print("{}: {}\n", .{ m, p });
-        }
-        board.unmove(m, old_state);
-    }
-    const elapsed: f64 = @floatFromInt(timer.read());
-    try output.print("Nodes searched (depth {}): {}\n", .{ depth, result });
-    try output.print("Search completed in {d:.1}ms\n", .{elapsed / std.time.ns_per_ms});
-}
-
 pub fn eval(board: *Board) i32 {
     var score: i32 = 0;
     for (0..16) |w| {
@@ -243,7 +206,7 @@ pub fn uciGo(output: anytype, board: *Board, tc: TimeControl) !void {
 
     var depth: i32 = 1;
     var rootmove: ?MoveCode = null;
-    while (true) : (depth += 1) {
+    while (depth < 256) : (depth += 1) {
         rootmove, const score = search(board, &info, -std.math.maxInt(i32), std.math.maxInt(i32), depth, .firstply) catch {
             try output.print("info depth {} time {} pv {?} string [hard timeout, deadline = {}]\n", .{ depth, info.read() / 1_000_000, rootmove, deadline });
             break;
@@ -355,7 +318,7 @@ pub fn main() !void {
                     continue;
                 };
                 if (it.next() != null) try output.print("info string Warning: Unexpected extra arguments to l.perft\n", .{});
-                try divide(output, &board, depth);
+                try cmd_perft.perft(output, &board, depth);
             } else if (std.mem.eql(u8, command, "l.bestmove")) {
                 const str = it.next() orelse continue;
                 const depth = std.fmt.parseInt(i32, str, 10) catch continue;
@@ -389,6 +352,8 @@ pub fn main() !void {
 
 const std = @import("std");
 const assert = std.debug.assert;
+const coord = @import("coord.zig");
+const cmd_perft = @import("cmd_perft.zig");
 const Board = @import("Board.zig");
 const Move = @import("Move.zig");
 const MoveCode = @import("MoveCode.zig");
