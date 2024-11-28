@@ -163,8 +163,6 @@ pub fn makeMoveByPgnCode(self: *Board, pgn_arg: []const u8) bool {
     const is_capture = pgn.len >= 3 and pgn[pgn.len - 3] == 'x';
     const dest: u8 = coord.fromString(pgn[pgn.len - 2..][0..2].*) catch return false;
 
-    std.debug.print("{s} dest {x} len {}\n", .{ pgn, dest, pgn.len - @intFromBool(is_capture) });
-
     var src_ptype: PieceType = .none;
     var src: u8 = 0;
     var src_mask: u8 = 0;
@@ -207,8 +205,6 @@ pub fn makeMoveByPgnCode(self: *Board, pgn_arg: []const u8) bool {
         },
         else => return false,
     }
-
-    std.debug.print("{} {x} {x} {} {x} {}\n", .{ src_ptype, src, src_mask, is_capture, dest, promotion_ptype });
 
     var candidate: ?Move = null;
     const id_base = self.active_color.idBase();
