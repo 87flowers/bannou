@@ -30,4 +30,19 @@ pub fn eval(game: *Game) i32 {
     };
 }
 
+pub fn phase(board: *Board) i32 {
+    var result: i32 = 0;
+    for (board.pieces) |ptype| {
+        result += switch (ptype) {
+            .none, .k, .p => 0,
+            .q => 4,
+            .r => 2,
+            .b => 1,
+            .n => 1,
+        };
+    }
+    return @min(result, 24);
+}
+
+const Board = @import("Board.zig");
 const Game = @import("Game.zig");
