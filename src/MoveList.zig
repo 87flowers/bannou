@@ -30,14 +30,16 @@ pub fn generateMovesForPiece(self: *MoveList, board: *Board, comptime mode: Move
                 const castle_k, const castle_q = castle_masks[@intFromEnum(board.active_color)];
                 if (castle_k & board.state.castle == 0 and board.board[rank | 5] == Place.empty and board.board[rank | 6] == Place.empty) {
                     if (!board.isAttacked(rank | 4, board.active_color) and !board.isAttacked(rank | 5, board.active_color) and !board.isAttacked(rank | 6, board.active_color)) {
-                        assert(board.board[rank | 7].ptype == .r and Color.fromId(board.board[rank | 7].id) == board.active_color);
-                        self.addCastle(mode, board.state, board.board[rank | 7].id, rank | 7, rank | 5, rank | 4, rank | 6);
+                        if (board.board[rank | 7].ptype == .r and Color.fromId(board.board[rank | 7].id) == board.active_color) {
+                            self.addCastle(mode, board.state, board.board[rank | 7].id, rank | 7, rank | 5, rank | 4, rank | 6);
+                        }
                     }
                 }
                 if (castle_q & board.state.castle == 0 and board.board[rank | 1] == Place.empty and board.board[rank | 2] == Place.empty and board.board[rank | 3] == Place.empty) {
                     if (!board.isAttacked(rank | 2, board.active_color) and !board.isAttacked(rank | 3, board.active_color) and !board.isAttacked(rank | 4, board.active_color)) {
-                        assert(board.board[rank | 0].ptype == .r and Color.fromId(board.board[rank | 0].id) == board.active_color);
-                        self.addCastle(mode, board.state, board.board[rank | 0].id, rank | 0, rank | 3, rank | 4, rank | 2);
+                        if (board.board[rank | 0].ptype == .r and Color.fromId(board.board[rank | 0].id) == board.active_color) {
+                            self.addCastle(mode, board.state, board.board[rank | 0].id, rank | 0, rank | 3, rank | 4, rank | 2);
+                        }
                     }
                 }
             }
