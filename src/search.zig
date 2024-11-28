@@ -46,6 +46,28 @@ pub const TimeControl = struct {
     }
 };
 
+pub const DepthControl = struct {
+    timer: std.time.Timer,
+    target_depth: i32,
+
+    pub fn init(target_depth: i32) DepthControl {
+        return .{
+            .timer = std.time.Timer.start() catch unreachable,
+            .target_depth = target_depth,
+        };
+    }
+
+    pub fn timeElapsed(self: *DepthControl) u64 {
+        return self.timer.read();
+    }
+
+    pub fn checkSoftTermination(self: *DepthControl, depth: i32) bool {
+        return depth >= self.target_depth;
+    }
+
+    pub fn checkHardTermination(_: *DepthControl, comptime _: SearchMode, _: i32) SearchError!void {}
+};
+
 fn search2(game: *Game, ctrl: anytype, alpha: i32, beta: i32, depth: i32, comptime mode: SearchMode) SearchError!i32 {
     _, const score = if (mode != .quiescence and depth <= 0)
         try search(game, ctrl, alpha, beta, depth, .quiescence)
