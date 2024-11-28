@@ -8,8 +8,12 @@ pub fn make(src_ptype: PieceType, src_coord: u8, dest_ptype: PieceType, dest_coo
     };
 }
 
+pub fn promotion(self: MoveCode) PieceType {
+    return @enumFromInt(self.code & 7);
+}
+
 pub fn isPromotion(self: MoveCode) bool {
-    return self.code & 7 != 0;
+    return self.promotion() != .none;
 }
 
 pub fn src(self: MoveCode) u8 {

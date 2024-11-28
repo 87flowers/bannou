@@ -113,7 +113,8 @@ pub fn makeMoveByCode(self: *Board, code: MoveCode) bool {
 
     var moves = MoveList{};
     moves.generateMovesForPiece(self, .any, p.id);
-    for (moves.moves) |m| {
+    for (0..moves.size) |i| {
+        const m = moves.moves[i];
         if (std.meta.eql(m.code, code)) {
             _ = self.move(m);
             return true;
@@ -124,11 +125,10 @@ pub fn makeMoveByCode(self: *Board, code: MoveCode) bool {
 
 pub fn makeMoveByPgnCode(self: *Board, pgn_arg: []const u8) bool {
     if (pgn_arg.len < 2) return false;
-    const pgn = switch (pgn_arg[pgn_arg.len - 1]) {
+    var pgn = switch (pgn_arg[pgn_arg.len - 1]) {
         '#', '+' => pgn_arg[0 .. pgn_arg.len - 1],
         else => pgn_arg,
     };
-    if (pgn.len < 2) return false;
 
     if (std.mem.eql(u8, pgn, "O-O")) {
         if (self.board[self.active_color.backRank() | 4].ptype != .k) return false;
@@ -146,62 +146,86 @@ pub fn makeMoveByPgnCode(self: *Board, pgn_arg: []const u8) bool {
         }
     }
 
-    const dest = coord.fromString(pgn[pgn.len - 2 ..][0..2].*) catch return false;
-
-    if (pgn.len == 2 or (pgn.len == 3 and pgn[0] == 'P')) {
-        for ([2]u8{ 1, 2 }) |i| {
-            const delta = switch (self.active_color) {
-                .white => 0xF0 *% i,
-                .black => 0x10 *% i,
-            };
-            const src = dest +% delta;
-            if (!coord.isValid(src)) return false;
-            if (self.board[src].ptype == .p) return self.makeMoveByCode(MoveCode.make(.p, src, .p, dest));
-        }
-        return false;
+    var promotion_ptype: PieceType = .none;
+    if (pgn.len >= 4 and pgn[pgn.len - 2] == '=') {
+        promotion_ptype = PieceType.parseUncolored(pgn[pgn.len - 1]) catch return false;
+        pgn = pgn[0..pgn.len - 2];
     }
 
-    if (pgn.len < 3) return false;
+    if (pgn.len < 2) return false;
+    const is_capture = pgn.len >= 3 and pgn[pgn.len - 3] == 'x';
+    const dest: u8 = coord.fromString(pgn[pgn.len - 2..][0..2].*) catch return false;
 
-    const is_capture = pgn[pgn.len - 3] == 'x';
-    const ptype: PieceType, const expected: u8, const mask: u8 = switch (pgn.len - 2 - @intFromBool(is_capture)) {
-        1 => blk: {
-            const maybe_ptype = PieceType.parse(pgn[0]) catch null;
-            if (maybe_ptype) |pt| break :blk .{ pt[0], 0, 0 };
-            const maybe_file: ?u8 = coord.fileFromChar(pgn[0]) catch null;
-            if (maybe_file) |file| break :blk .{ .p, file, 0x07 };
-            return false;
+    std.debug.print("{s} dest {x} len {}\n", .{ pgn, dest, pgn.len - @intFromBool(is_capture) });
+
+    var src_ptype: PieceType = .none;
+    var src: u8 = 0;
+    var src_mask: u8 = 0;
+    switch (pgn.len - @intFromBool(is_capture)) {
+        2 => {
+            // e.g. e4
+            if (is_capture) return false;
+            src_ptype = .p;
         },
-        2 => blk: {
-            const pt = PieceType.parse(pgn[0]) catch return false;
-            const maybe_file: ?u8 = coord.fileFromChar(pgn[1]) catch null;
-            if (maybe_file) |file| break :blk .{ pt[0], file, 0x07 };
-            const maybe_rank: ?u8 = coord.rankFromChar(pgn[1]) catch null;
-            if (maybe_rank) |rank| break :blk .{ pt[0], rank, 0x70 };
-            return false;
+        3 => {
+            if (pgn[0] >= 'a' and pgn[0] <= 'h') {
+                // e.g. axb3
+                if (!is_capture) return false;
+                src_ptype = .p;
+                src = coord.fileFromChar(pgn[0]) catch unreachable;
+                src_mask = 0x07;
+            } else {
+                // e.g. Bb3, Bxb3
+                src_ptype = PieceType.parseUncolored(pgn[0]) catch return false;
+            }
         },
-        3 => blk: {
-            const pt = PieceType.parse(pgn[0]) catch return false;
-            const src = coord.fromString(pgn[1..3].*) catch return false;
-            break :blk .{ pt[0], src, 0xFF };
+        4 => {
+            // e.g. Qhxa3, Q3xb7, Qba4, Q6a3
+            src_ptype = PieceType.parseUncolored(pgn[0]) catch return false;
+            if (coord.fileFromChar(pgn[1]) catch null) |file| {
+                src = file;
+                src_mask = 0x07;
+            } else if (coord.rankFromChar(pgn[1]) catch null) |rank| {
+                src = rank;
+                src_mask = 0x70;
+            } else {
+                return false;
+            }
+        },
+        5 => {
+            // e.g. Qa1b2, Qa1xb2
+            src_ptype = PieceType.parseUncolored(pgn[0]) catch return false;
+            src = coord.fromString(pgn[1..3].*) catch return false;
+            src_mask = 0xFF;
         },
         else => return false,
-    };
+    }
 
+    std.debug.print("{} {x} {x} {} {x} {}\n", .{ src_ptype, src, src_mask, is_capture, dest, promotion_ptype });
+
+    var candidate: ?Move = null;
     const id_base = self.active_color.idBase();
-    for (0..32) |id_index| {
+    for (0..16) |id_index| {
         const id: u5 = @truncate(id_base + id_index);
-        if (self.pieces[id] != ptype) continue;
-        if (self.where[id] & mask != expected) continue;
+        if (self.pieces[id] != src_ptype) continue;
+        if (self.where[id] & src_mask != src) continue;
 
         var moves = MoveList{};
         moves.generateMovesForPiece(self, .any, id);
-        for (moves.moves) |m| {
-            if (m.code.dest() == dest) {
-                _ = self.move(m);
-                return true;
+        for (0..moves.size) |i| {
+            const m = moves.moves[i];
+            if (m.isCapture() == is_capture and m.code.dest() == dest and m.code.promotion() == promotion_ptype) {
+                const old_state = self.move(m);
+                defer self.unmove(m, old_state);
+                if (!self.isValid()) continue;
+                if (candidate != null) return false;
+                candidate = m;
             }
         }
+    }
+    if (candidate) |m| {
+        _ = self.move(m);
+        return true;
     }
     return false;
 }
@@ -256,6 +280,23 @@ test {
     var tmp: [50]u8 = undefined;
     const fen = try std.fmt.bufPrint(&tmp, "{}", .{board});
     try std.testing.expectEqualStrings("8/5pk1/7p/8/1p4P1/1P1R2P1/3N1qBP/3Nr2K w - - 1 41", fen);
+}
+
+test {
+    const cases = [_]struct{ []const u8, []const u8, []const u8 } {
+        .{ "7r/3r1p1p/6p1/1p6/2B5/5PP1/1Q5P/1K1k4 b - - 0 38", "bxc4", "7r/3r1p1p/6p1/8/2p5/5PP1/1Q5P/1K1k4 w - - 0 39" },
+        .{ "2n1r1n1/1p1k1p2/6pp/R2pP3/3P4/8/5PPP/2R3K1 b - - 0 30", "Nge7", "2n1r3/1p1knp2/6pp/R2pP3/3P4/8/5PPP/2R3K1 w - - 1 31" },
+        .{ "8/5p2/1kn1r1n1/1p1pP3/6K1/8/4R3/5R2 b - - 9 60", "Ngxe5+", "8/5p2/1kn1r3/1p1pn3/6K1/8/4R3/5R2 w - - 0 61" },
+        .{ "r3k2r/pp1bnpbp/1q3np1/3p4/3N1P2/1PP1Q2P/P1B3P1/RNB1K2R b KQkq - 5 15", "Ng8", "r3k1nr/pp1bnpbp/1q4p1/3p4/3N1P2/1PP1Q2P/P1B3P1/RNB1K2R w KQkq - 6 16" },
+    };
+    for (cases) |case| {
+        const before, const pgncode, const after = case;
+        var board = try Board.parse(before);
+        try std.testing.expect(board.makeMoveByPgnCode(pgncode));
+        var tmp: [128]u8 = undefined;
+        const fen = try std.fmt.bufPrint(&tmp, "{}", .{board});
+        try std.testing.expectEqualStrings(after, fen);
+    }
 }
 
 pub fn unmove(self: *Board, m: Move, old_state: State) void {

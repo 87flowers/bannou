@@ -45,6 +45,18 @@ pub const PieceType = enum(u3) {
         });
     }
 
+    pub fn parseUncolored(ch: u8) ParseError!PieceType {
+        return switch (ch) {
+            'K' => .k,
+            'Q' => .q,
+            'R' => .r,
+            'B' => .b,
+            'N' => .n,
+            'P' => .p,
+            else => ParseError.InvalidChar,
+        };
+    }
+
     pub fn parse(ch: u8) ParseError!struct { PieceType, Color } {
         return switch (ch) {
             'K' => .{ .k, .white },
