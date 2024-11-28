@@ -450,6 +450,18 @@ pub fn format(self: Board, comptime _: []const u8, _: std.fmt.FormatOptions, wri
     try writer.print(" {} {}", .{ self.active_color, self.state });
 }
 
+pub fn parse(str: []const u8) !Board {
+    var it = std.mem.tokenizeAny(u8, str, " \t\r\n");
+    const board_str = it.next() orelse return ParseError.InvalidLength;
+    const color = it.next() orelse return ParseError.InvalidLength;
+    const castling = it.next() orelse return ParseError.InvalidLength;
+    const enpassant = it.next() orelse return ParseError.InvalidLength;
+    const no_capture_clock = it.next() orelse return ParseError.InvalidLength;
+    const ply = it.next() orelse return ParseError.InvalidLength;
+    if (it.next() != null) return ParseError.InvalidLength;
+    return Board.parseParts(board_str, color, castling, enpassant, no_capture_clock, ply);
+}
+
 pub fn parseParts(board_str: []const u8, color_str: []const u8, castle_str: []const u8, enpassant_str: []const u8, no_capture_clock_str: []const u8, ply_str: []const u8) !Board {
     var result = Board.emptyBoard();
 
