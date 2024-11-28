@@ -67,12 +67,19 @@ pub fn defaultBoard() Board {
     };
 }
 
-fn place(self: *Board, id: u5, ptype: PieceType, where: u8) void {
+pub fn place(self: *Board, id: u5, ptype: PieceType, where: u8) void {
     assert(self.board[where] == Place.empty and self.pieces[id] == .none);
     self.pieces[id] = ptype;
     self.where[id] = where;
     self.board[where] = Place{ .ptype = ptype, .id = id };
     self.state.hash ^= zhash.piece(Color.fromId(id), ptype, where);
+}
+
+pub fn unplace(self: *Board, id: u5) void {
+    assert(self.pieces[id] != .none and self.board[self.where[id]] != Place.empty);
+    self.state.hash ^= zhash.piece(Color.fromId(id), self.pieces[id], self.where[id]);
+    self.pieces[id] = .none;
+    self.board[self.where[id]] = Place.empty;
 }
 
 pub fn move(self: *Board, m: Move) State {
