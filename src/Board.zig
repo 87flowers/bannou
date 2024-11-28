@@ -125,7 +125,7 @@ pub fn makeMoveByCode(self: *Board, code: MoveCode) bool {
 pub fn makeMoveByPgnCode(self: *Board, pgn_arg: []const u8) bool {
     if (pgn_arg.len < 2) return false;
     const pgn = switch (pgn_arg[pgn_arg.len - 1]) {
-        '#', '+' => pgn_arg[0..pgn_arg.len - 1],
+        '#', '+' => pgn_arg[0 .. pgn_arg.len - 1],
         else => pgn_arg,
     };
     if (pgn.len < 2) return false;
@@ -146,7 +146,7 @@ pub fn makeMoveByPgnCode(self: *Board, pgn_arg: []const u8) bool {
         }
     }
 
-    const dest = coord.fromString(pgn[pgn.len - 2..][0..2].*) catch return false;
+    const dest = coord.fromString(pgn[pgn.len - 2 ..][0..2].*) catch return false;
 
     if (pgn.len == 2 or (pgn.len == 3 and pgn[0] == 'P')) {
         for ([2]u8{ 1, 2 }) |i| {
@@ -208,46 +208,46 @@ pub fn makeMoveByPgnCode(self: *Board, pgn_arg: []const u8) bool {
 
 test {
     var board = Board.defaultBoard();
-    const moves = [_][]const u8 {
-        "e4", "c5",
-        "Nf3", "e6",
-        "d4", "cxd4",
+    const moves = [_][]const u8{
+        "e4",   "c5",
+        "Nf3",  "e6",
+        "d4",   "cxd4",
         "Nxd4", "Nc6",
-        "Nb5", "d6",
-        "c4", "Nf6",
+        "Nb5",  "d6",
+        "c4",   "Nf6",
         "N1c3", "a6",
-        "Na3", "d5",
+        "Na3",  "d5",
         "cxd5", "exd5",
         "exd5", "Nb4",
-        "Be2", "Bc5",
-        "O-O", "O-O",
-        "Bf3", "Bf5",
-        "Bg5", "Re8",
-        "Qd2", "b5",
+        "Be2",  "Bc5",
+        "O-O",  "O-O",
+        "Bf3",  "Bf5",
+        "Bg5",  "Re8",
+        "Qd2",  "b5",
         "Rad1", "Nd3",
         "Nab1", "h6",
-        "Bh4", "b4",
-        "Na4", "Bd6",
-        "Bg3", "Rc8",
-        "b3", "g5",
+        "Bh4",  "b4",
+        "Na4",  "Bd6",
+        "Bg3",  "Rc8",
+        "b3",   "g5",
         "Bxd6", "Qxd6",
-        "g3", "Nd7",
-        "Bg2", "Qf6",
-        "a3", "a5",
+        "g3",   "Nd7",
+        "Bg2",  "Qf6",
+        "a3",   "a5",
         "axb4", "axb4",
-        "Qa2", "Bg6",
-        "d6", "g4",
-        "Qd2", "Kg7",
-        "f3", "Qxd6",
+        "Qa2",  "Bg6",
+        "d6",   "g4",
+        "Qd2",  "Kg7",
+        "f3",   "Qxd6",
         "fxg4", "Qd4+",
-        "Kh1", "Nf6",
-        "Rf4", "Ne4",
+        "Kh1",  "Nf6",
+        "Rf4",  "Ne4",
         "Qxd3", "Nf2+",
         "Rxf2", "Bxd3",
         "Rfd2", "Qe3",
         "Rxd3", "Rc1",
-        "Nb2", "Qf2",
-        "Nd2", "Rxd1+",
+        "Nb2",  "Qf2",
+        "Nd2",  "Rxd1+",
         "Nxd1", "Re1+",
     };
     for (moves) |m| {

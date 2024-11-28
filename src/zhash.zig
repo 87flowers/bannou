@@ -21,4 +21,4 @@ const std = @import("std");
 const castle_mask = @import("castle_mask.zig");
 const Color = @import("common.zig").Color;
 const PieceType = @import("common.zig").PieceType;
-const Prng = @import("Prng.zig");
+const Prng = @import("util/Prng.zig");

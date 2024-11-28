@@ -15,8 +15,7 @@ pub const NullControl = struct {
         return false;
     }
 
-    pub fn checkHardTermination(_: *NullControl, comptime _: SearchMode, _: i32) SearchError!void {
-    }
+    pub fn checkHardTermination(_: *NullControl, comptime _: SearchMode, _: i32) SearchError!void {}
 };
 
 pub const TimeControl = struct {
@@ -145,12 +144,13 @@ pub fn search(game: *Game, ctrl: anytype, alpha: i32, beta: i32, depth: i32, com
     return .{ best_move, best_score };
 }
 
-pub fn go(output: anytype, game: *Game, ctrl: anytype) !void {
+pub fn go(output: anytype, game: *Game, ctrl: anytype) !struct { ?MoveCode, i32 } {
     comptime assert(@typeInfo(@TypeOf(ctrl)) == .pointer);
     var depth: i32 = 1;
     var rootmove: ?MoveCode = null;
+    var score: i32 = undefined;
     while (depth < 256) : (depth += 1) {
-        rootmove, const score = search(game, ctrl, -std.math.maxInt(i32), std.math.maxInt(i32), depth, .firstply) catch {
+        rootmove, score = search(game, ctrl, -std.math.maxInt(i32), std.math.maxInt(i32), depth, .firstply) catch {
             try output.print("info depth {} time {} pv {?} string [search terminated]\n", .{ depth, ctrl.timeElapsed(), rootmove });
             break;
         };
@@ -158,10 +158,10 @@ pub fn go(output: anytype, game: *Game, ctrl: anytype) !void {
         if (ctrl.checkSoftTermination(depth)) break;
         if (rootmove == null) break;
     }
-    try output.print("bestmove {?}\n", .{rootmove});
+    return .{ rootmove, score };
 }
 
-const SearchError = error{ EarlyTermination };
+const SearchError = error{EarlyTermination};
 const SearchMode = enum { firstply, normal, nullmove, quiescence };
 
 const std = @import("std");

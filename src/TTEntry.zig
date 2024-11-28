@@ -4,7 +4,7 @@ depth: u8,
 bound: Bound,
 score: i32,
 
-pub const empty = TTEntry {
+pub const empty = TTEntry{
     .hash = 0,
     .best_move = .{ .code = 0 },
     .depth = undefined,

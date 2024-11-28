@@ -18,7 +18,8 @@ pub fn uciGo(output: anytype, game: *Game, tc: TimeControl) !void {
     const deadline = safe_time_remaining / movestogo; // nanoseconds
     var info = search.TimeControl.init(deadline / 2, safe_time_remaining / 2);
 
-    return search.go(output, game, &info);
+    const bestmove, _ = try search.go(output, game, &info);
+    try output.print("bestmove {?}\n", .{bestmove});
 }
 
 var g = Game{};
