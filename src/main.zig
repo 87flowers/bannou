@@ -29,8 +29,8 @@ pub fn main() !void {
     var output = std.io.getStdOut().writer();
 
     var buffer: [2048]u8 = undefined;
-    while (try input.readUntilDelimiterOrEof(&buffer, '\n')) |line| {
-        var it = std.mem.tokenizeAny(u8, line, " \t\r\n");
+    while (try input.readUntilDelimiterOrEof(&buffer, '\n')) |input_line| {
+        var it = std.mem.tokenizeAny(u8, input_line, " \t\r\n");
         if (it.next()) |command| {
             if (std.mem.eql(u8, command, "position")) {
                 const pos_type = it.next() orelse "startpos";
@@ -94,7 +94,7 @@ pub fn main() !void {
                 g = .{};
             } else if (std.mem.eql(u8, command, "uci")) {
                 try output.print("{s}\n", .{
-                    \\id name Bannou 0.14
+                    \\id name Bannou 0.15
                     \\id author 87 (87flowers.com)
                     \\uciok
                 });
@@ -127,9 +127,11 @@ pub fn main() !void {
                 const str = it.next() orelse continue;
                 const depth = std.fmt.parseInt(i32, str, 10) catch continue;
                 var ctrl = search.NullControl.init();
-                try output.print("{any}\n", .{try search.search(&g, &ctrl, -std.math.maxInt(i32), std.math.maxInt(i32), depth, .firstply)});
+                var pv = line.Line{};
+                const score = try search.search(&g, &ctrl, &pv, -std.math.maxInt(i32), std.math.maxInt(i32), depth, .firstply);
+                try output.print("score cp {} pv {}\n", .{ score, pv });
             } else if (std.mem.eql(u8, command, "l.eval")) {
-                try output.print("{}\n", .{eval.eval(&g)});
+                try output.print("score cp {}\n", .{eval.eval(&g)});
             } else if (std.mem.eql(u8, command, "l.history")) {
                 for (g.board.zhistory[0 .. g.board.state.ply + 1], 0..) |h, i| {
                     try output.print("{}: {X}\n", .{ i, h });
@@ -138,9 +140,10 @@ pub fn main() !void {
                 const str = it.next() orelse continue;
                 const depth = std.fmt.parseInt(i32, str, 10) catch continue;
                 var ctrl = search.NullControl.init();
-                const bm = try search.search(&g, &ctrl, -std.math.maxInt(i32), std.math.maxInt(i32), depth, .firstply);
-                try output.print("{any}\n", .{bm});
-                if (bm[0]) |m| {
+                var bm = line.RootMove{};
+                _ = try search.search(&g, &ctrl, &bm, -std.math.maxInt(i32), std.math.maxInt(i32), depth, .firstply);
+                try output.print("{}\n", .{bm});
+                if (bm.move) |m| {
                     _ = g.board.makeMoveByCode(m);
                 } else {
                     try output.print("No valid move.\n", .{});
@@ -158,6 +161,7 @@ const std = @import("std");
 const assert = std.debug.assert;
 const cmd_perft = @import("cmd_perft.zig");
 const eval = @import("eval.zig");
+const line = @import("line.zig");
 const search = @import("search.zig");
 const Board = @import("Board.zig");
 const Game = @import("Game.zig");
