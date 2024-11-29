@@ -9,22 +9,22 @@ ply: u16,
 /// Zorbrist hash for position
 hash: u64,
 
-pub fn format(self: State, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+pub fn format(self: *const State, writer: anytype, board: *const Board) !void {
     // castling state
     var hasCastle = false;
-    if (self.castle & castle_mask.wk == 0) {
+    if (self.castle & castle_mask.wk == 0 and board.board[0x04].ptype == .k and board.board[0x07].ptype == .r) {
         try writer.print("K", .{});
         hasCastle = true;
     }
-    if (self.castle & castle_mask.wq == 0) {
+    if (self.castle & castle_mask.wq == 0 and board.board[0x04].ptype == .k and board.board[0x00].ptype == .r) {
         try writer.print("Q", .{});
         hasCastle = true;
     }
-    if (self.castle & castle_mask.bk == 0) {
+    if (self.castle & castle_mask.bk == 0 and board.board[0x74].ptype == .k and board.board[0x77].ptype == .r) {
         try writer.print("k", .{});
         hasCastle = true;
     }
-    if (self.castle & castle_mask.bq == 0) {
+    if (self.castle & castle_mask.bq == 0 and board.board[0x74].ptype == .k and board.board[0x70].ptype == .r) {
         try writer.print("q", .{});
         hasCastle = true;
     }
@@ -74,5 +74,6 @@ const State = @This();
 const std = @import("std");
 const castle_mask = @import("castle_mask.zig");
 const coord = @import("coord.zig");
+const Board = @import("Board.zig");
 const Color = @import("common.zig").Color;
 const ParseError = @import("common.zig").ParseError;

@@ -104,7 +104,7 @@ pub fn main() !void {
             } else if (std.mem.eql(u8, command, "quit")) {
                 return;
             } else if (std.mem.eql(u8, command, "d")) {
-                g.board.debugPrint();
+                try g.board.debugPrint(output);
             } else if (std.mem.eql(u8, command, "l.move")) {
                 while (it.next()) |move_str| {
                     const code = MoveCode.parse(move_str) catch {
@@ -145,7 +145,7 @@ pub fn main() !void {
                 } else {
                     try output.print("No valid move.\n", .{});
                 }
-                g.board.debugPrint();
+                try g.board.debugPrint(output);
             } else {
                 try output.print("info string Error: Unknown command '{s}'\n", .{command});
                 continue;

@@ -73,13 +73,18 @@ pub fn place(self: *Board, id: u5, ptype: PieceType, where: u8) void {
     self.where[id] = where;
     self.board[where] = Place{ .ptype = ptype, .id = id };
     self.state.hash ^= zhash.piece(Color.fromId(id), ptype, where);
+    self.zhistory[self.state.ply] = self.state.hash;
 }
 
 pub fn unplace(self: *Board, id: u5) void {
     assert(self.pieces[id] != .none and self.board[self.where[id]] != Place.empty);
-    self.state.hash ^= zhash.piece(Color.fromId(id), self.pieces[id], self.where[id]);
+    const ptype = self.pieces[id];
+    const where = self.where[id];
+    self.state.hash ^= zhash.piece(Color.fromId(id), ptype, where);
+    self.zhistory[self.state.ply] = self.state.hash;
     self.pieces[id] = .none;
-    self.board[self.where[id]] = Place.empty;
+    self.where[id] = 0xFF;
+    self.board[where] = Place.empty;
 }
 
 pub fn move(self: *Board, m: Move) State {
@@ -428,7 +433,7 @@ pub fn is50MoveExpired(self: *Board) bool {
     return self.state.no_capture_clock >= 100;
 }
 
-pub fn format(self: Board, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+pub fn format(self: *const Board, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
     var blanks: u32 = 0;
     for (0..64) |i| {
         const j = (i + (i & 0o70)) ^ 0x70;
@@ -450,7 +455,8 @@ pub fn format(self: Board, comptime _: []const u8, _: std.fmt.FormatOptions, wri
             if (i != 63) try writer.print("/", .{});
         }
     }
-    try writer.print(" {} {}", .{ self.active_color, self.state });
+    try writer.print(" {} ", .{self.active_color});
+    try self.state.format(writer, self);
 }
 
 pub fn parse(str: []const u8) !Board {
@@ -503,14 +509,16 @@ pub fn parseParts(board_str: []const u8, color_str: []const u8, castle_str: []co
     return result;
 }
 
-pub fn debugPrint(self: *const Board) void {
+pub fn debugPrint(self: *const Board, output: anytype) !void {
     for (0..64) |i| {
         const j = (i + (i & 0o70)) ^ 0x70;
         const p = self.board[j];
-        std.debug.print("{c}", .{p.ptype.toChar(Color.fromId(p.id))});
+        try output.print("{c}", .{p.ptype.toChar(Color.fromId(p.id))});
         if (i % 8 == 7) std.debug.print("\n", .{});
     }
-    std.debug.print("{} {}\n", .{ self.active_color, self.state });
+    try output.print("{} ", .{self.active_color});
+    try self.state.format(output, self);
+    try output.print("\n", .{});
 }
 
 pub const Place = packed struct(u8) {
