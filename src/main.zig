@@ -18,8 +18,9 @@ pub fn uciGo(output: anytype, game: *Game, tc: TimeControl) !void {
     const deadline = safe_time_remaining / movestogo; // nanoseconds
     var info = search.TimeControl.init(.{ .soft_deadline = deadline / 2, .hard_deadline = safe_time_remaining / 2 });
 
-    const bestmove, _ = try search.go(output, game, &info);
-    try output.print("bestmove {?}\n", .{bestmove});
+    var bestmove = line.RootMove{};
+    _ = try search.go(output, game, &info, &bestmove);
+    try output.print("bestmove {}\n", .{bestmove});
 }
 
 var g = Game{};
@@ -128,7 +129,7 @@ pub fn main() !void {
                 const depth = std.fmt.parseInt(i32, str, 10) catch continue;
                 var ctrl = search.DepthControl.init(.{ .target_depth = depth });
                 var pv = line.Line{};
-                const score = try search.search(&g, &ctrl, &pv, -std.math.maxInt(i32), std.math.maxInt(i32), depth, .firstply);
+                const score = try search.go(output, &g, &ctrl, &pv);
                 try output.print("score cp {} pv {}\n", .{ score, pv });
             } else if (std.mem.eql(u8, command, "l.eval")) {
                 try output.print("score cp {}\n", .{eval.eval(&g)});
@@ -140,11 +141,11 @@ pub fn main() !void {
                 const str = it.next() orelse continue;
                 const depth = std.fmt.parseInt(i32, str, 10) catch continue;
                 var ctrl = search.DepthControl.init(.{ .target_depth = depth });
-                var bm = line.RootMove{};
-                _ = try search.search(&g, &ctrl, &bm, -std.math.maxInt(i32), std.math.maxInt(i32), depth, .firstply);
-                try output.print("{}\n", .{bm});
-                if (bm.move) |m| {
-                    _ = g.board.makeMoveByCode(m);
+                var pv = line.Line{};
+                const score = try search.go(output, &g, &ctrl, &pv);
+                try output.print("score cp {} pv {}\n", .{ score, pv });
+                if (pv.len > 0) {
+                    _ = g.board.makeMoveByCode(pv.pv[0]);
                 } else {
                     try output.print("No valid move.\n", .{});
                 }

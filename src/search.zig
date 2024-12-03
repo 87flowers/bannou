@@ -75,7 +75,7 @@ fn search2(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, depth
         try search(game, ctrl, pv, alpha, beta, depth, mode);
 }
 
-pub fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, depth: i32, comptime mode: SearchMode) SearchError!i32 {
+fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, depth: i32, comptime mode: SearchMode) SearchError!i32 {
     // Preconditions for optimizer to be aware of.
     if (mode != .quiescence) assert(depth > 0);
     if (mode == .quiescence) assert(depth <= 0);
@@ -176,20 +176,19 @@ pub fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, de
     return best_score;
 }
 
-pub fn go(output: anytype, game: *Game, ctrl: anytype) !struct { ?MoveCode, i32 } {
-    comptime assert(@typeInfo(@TypeOf(ctrl)) == .pointer);
+pub fn go(output: anytype, game: *Game, ctrl: anytype, pv: anytype) !i32 {
+    comptime assert(@typeInfo(@TypeOf(ctrl)) == .pointer and @typeInfo(@TypeOf(pv)) == .pointer );
     var depth: i32 = 1;
-    var pv = line.RootMove{};
     var score: i32 = undefined;
     while (depth < 256) : (depth += 1) {
-        score = search(game, ctrl, &pv, -std.math.maxInt(i32), std.math.maxInt(i32), depth, .firstply) catch {
+        score = search(game, ctrl, pv, -std.math.maxInt(i32), std.math.maxInt(i32), depth, .firstply) catch {
             try output.print("info depth {} score cp {} {} pv {} string [search terminated]\n", .{ depth, score, ctrl, pv });
             break;
         };
         try output.print("info depth {} score cp {} {} pv {}\n", .{ depth, score, ctrl, pv });
         if (ctrl.checkSoftTermination(depth)) break;
     }
-    return .{ pv.move, score };
+    return score;
 }
 
 const SearchError = error{EarlyTermination};
