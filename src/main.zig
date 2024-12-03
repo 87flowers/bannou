@@ -95,7 +95,7 @@ pub fn main() !void {
                 g = .{};
             } else if (std.mem.eql(u8, command, "uci")) {
                 try output.print("{s}\n", .{
-                    \\id name Bannou 0.15
+                    \\id name Bannou 0.16
                     \\id author 87 (87flowers.com)
                     \\uciok
                 });
@@ -127,7 +127,7 @@ pub fn main() !void {
             } else if (std.mem.eql(u8, command, "l.bestmove")) {
                 const str = it.next() orelse continue;
                 const depth = std.fmt.parseInt(i32, str, 10) catch continue;
-                var ctrl = search.DepthControl.init(.{ .target_depth = depth });
+                var ctrl = search.Control(&.{.depth}, .{ .track_time = true, .track_nodes = true }).init(.{ .target_depth = depth });
                 var pv = line.Line{};
                 const score = try search.go(output, &g, &ctrl, &pv);
                 try output.print("score cp {} pv {}\n", .{ score, pv });
@@ -140,7 +140,7 @@ pub fn main() !void {
             } else if (std.mem.eql(u8, command, "l.auto")) {
                 const str = it.next() orelse continue;
                 const depth = std.fmt.parseInt(i32, str, 10) catch continue;
-                var ctrl = search.DepthControl.init(.{ .target_depth = depth });
+                var ctrl = search.Control(&.{.depth}, .{ .track_time = true, .track_nodes = true }).init(.{ .target_depth = depth });
                 var pv = line.Line{};
                 const score = try search.go(output, &g, &ctrl, &pv);
                 try output.print("score cp {} pv {}\n", .{ score, pv });
