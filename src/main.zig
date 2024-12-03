@@ -16,7 +16,7 @@ pub fn uciGo(output: anytype, game: *Game, tc: TimeControl) !void {
     };
     const safe_time_remaining = (@max(time_remaining, margin) - margin) * std.time.ns_per_ms; // nanoseconds
     const deadline = safe_time_remaining / movestogo; // nanoseconds
-    var info = search.TimeControl.init(deadline / 2, safe_time_remaining / 2);
+    var info = search.TimeControl.init(.{ .soft_deadline = deadline / 2, .hard_deadline = safe_time_remaining / 2 });
 
     const bestmove, _ = try search.go(output, game, &info);
     try output.print("bestmove {?}\n", .{bestmove});
@@ -126,7 +126,7 @@ pub fn main() !void {
             } else if (std.mem.eql(u8, command, "l.bestmove")) {
                 const str = it.next() orelse continue;
                 const depth = std.fmt.parseInt(i32, str, 10) catch continue;
-                var ctrl = search.NullControl.init();
+                var ctrl = search.DepthControl.init(.{ .target_depth = depth });
                 var pv = line.Line{};
                 const score = try search.search(&g, &ctrl, &pv, -std.math.maxInt(i32), std.math.maxInt(i32), depth, .firstply);
                 try output.print("score cp {} pv {}\n", .{ score, pv });
@@ -139,7 +139,7 @@ pub fn main() !void {
             } else if (std.mem.eql(u8, command, "l.auto")) {
                 const str = it.next() orelse continue;
                 const depth = std.fmt.parseInt(i32, str, 10) catch continue;
-                var ctrl = search.NullControl.init();
+                var ctrl = search.DepthControl.init(.{ .target_depth = depth });
                 var bm = line.RootMove{};
                 _ = try search.search(&g, &ctrl, &bm, -std.math.maxInt(i32), std.math.maxInt(i32), depth, .firstply);
                 try output.print("{}\n", .{bm});

@@ -1,72 +1,70 @@
-pub const NullControl = struct {
-    timer: std.time.Timer,
+fn contains(limits: []const Limit, limit: Limit) bool {
+    return std.mem.containsAtLeast(Limit, limits, 1, &.{limit});
+}
+const Limit = enum { time, depth, nodes };
+pub fn Control(
+    comptime limits: []const Limit,
+    comptime to_track: struct {
+        track_time: bool = false,
+        track_nodes: bool = false
+    },
+) type {
+    const needs_timer = to_track.track_time or contains(limits, .time);
+    const needs_nodes = to_track.track_nodes or contains(limits, .nodes);
+    const has_time_limit = contains(limits, .time);
+    const has_depth_limit = contains(limits, .depth);
+    const has_nodes_limit = contains(limits, .nodes);
 
-    pub fn init() NullControl {
-        return .{
-            .timer = std.time.Timer.start() catch unreachable,
-        };
-    }
+    return struct {
+        timer: if (needs_timer) std.time.Timer else void,
+        nodes: if (needs_nodes) u64 else void,
+        time_limit: if (has_time_limit) struct { soft_deadline: u64, hard_deadline: u64 } else void,
+        depth_limit: if (has_depth_limit) struct { target_depth: i32 } else void,
+        nodes_limit: if (has_nodes_limit) struct { target_nodes: i32 } else void,
 
-    pub fn timeElapsed(self: *NullControl) u64 {
-        return self.timer.read();
-    }
-
-    pub fn checkSoftTermination(_: *NullControl, _: i32) bool {
-        return false;
-    }
-
-    pub fn checkHardTermination(_: *NullControl, comptime _: SearchMode, _: i32) SearchError!void {}
-};
-
-pub const TimeControl = struct {
-    timer: std.time.Timer,
-    soft_deadline: u64,
-    hard_deadline: u64,
-
-    pub fn init(soft_deadline: u64, hard_deadline: u64) TimeControl {
-        return .{
-            .timer = std.time.Timer.start() catch unreachable,
-            .soft_deadline = soft_deadline,
-            .hard_deadline = hard_deadline,
-        };
-    }
-
-    pub fn timeElapsed(self: *TimeControl) u64 {
-        return self.timer.read();
-    }
-
-    pub fn checkSoftTermination(self: *TimeControl, _: i32) bool {
-        return self.soft_deadline <= self.timer.read();
-    }
-
-    pub fn checkHardTermination(self: *TimeControl, comptime mode: SearchMode, depth: i32) SearchError!void {
-        if (mode == .normal and depth > 3) {
-            if (self.hard_deadline <= self.timer.read()) return SearchError.EarlyTermination;
+        pub fn init(args: anytype) @This() {
+            return .{
+                .timer = if (needs_timer) std.time.Timer.start() catch unreachable else {},
+                .nodes = if (needs_nodes) 0 else {},
+                .time_limit = if (has_time_limit) .{ .soft_deadline = args.soft_deadline, .hard_deadline = args.hard_deadline } else {},
+                .depth_limit = if (has_depth_limit) .{ .target_depth = args.target_depth } else {},
+                .nodes_limit = if (has_nodes_limit) .{ .target_nodes = args.target_nodes } else {},
+            };
         }
-    }
-};
 
-pub const DepthControl = struct {
-    timer: std.time.Timer,
-    target_depth: i32,
+        pub fn nodeVisited(self: *@This()) void {
+            if (needs_nodes) self.nodes += 1;
+        }
 
-    pub fn init(target_depth: i32) DepthControl {
-        return .{
-            .timer = std.time.Timer.start() catch unreachable,
-            .target_depth = target_depth,
-        };
-    }
+        /// Returns true if we should terminate the search
+        pub fn checkSoftTermination(self: *@This(), depth: i32) bool {
+            if (has_time_limit and self.time_limit.soft_deadline <= self.timer.read()) return true;
+            if (has_depth_limit and depth >= self.depth_limit.target_depth) return true;
+            if (has_nodes_limit and self.nodes >= self.nodes_limit.target_nodes) return true;
+            return false;
+        }
 
-    pub fn timeElapsed(self: *DepthControl) u64 {
-        return self.timer.read();
-    }
+        /// Raises SearchError.EarlyTermination if we should terminate the search
+        pub fn checkHardTermination(self: *@This(), comptime mode: SearchMode, depth: i32) SearchError!void {
+            if (has_time_limit and mode == .normal and depth > 3 and self.time_limit.hard_deadline <= self.timer.read()) return SearchError.EarlyTermination;
+            if (has_nodes_limit and self.nodes >= self.nodes_limit.target_nodes) return SearchError.EarlyTermination;
+        }
 
-    pub fn checkSoftTermination(self: *DepthControl, depth: i32) bool {
-        return depth >= self.target_depth;
-    }
+        pub fn format(self: *@This(), comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+            if (needs_timer and needs_nodes) {
+                const nps = self.nodes * std.time.ns_per_s / self.timer.read();
+                try writer.print("time {} nodes {} nps {}", .{ self.timer.read() / std.time.ns_per_ms, self.nodes, nps });
+            } else if (needs_timer) {
+                try writer.print("time {}", .{self.timer.read() / std.time.ns_per_ms});
+            } else if (needs_nodes) {
+                try writer.print("nodes {}", .{self.nodes});
+            }
+        }
+    };
+}
 
-    pub fn checkHardTermination(_: *DepthControl, comptime _: SearchMode, _: i32) SearchError!void {}
-};
+pub const TimeControl = Control(&.{.time}, .{});
+pub const DepthControl = Control(&.{.depth}, .{});
 
 fn search2(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, depth: i32, comptime mode: SearchMode) SearchError!i32 {
     return if (mode != .quiescence and depth <= 0)
@@ -133,6 +131,7 @@ pub fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, de
     for (0..moves.size) |i| {
         const m = moves.moves[i];
         const old_state = game.board.move(m);
+        ctrl.nodeVisited();
         defer game.board.unmove(m, old_state);
         if (game.board.isValid()) {
             var child_pv = pv.newChild();
@@ -184,10 +183,10 @@ pub fn go(output: anytype, game: *Game, ctrl: anytype) !struct { ?MoveCode, i32 
     var score: i32 = undefined;
     while (depth < 256) : (depth += 1) {
         score = search(game, ctrl, &pv, -std.math.maxInt(i32), std.math.maxInt(i32), depth, .firstply) catch {
-            try output.print("info depth {} time {} pv {} string [search terminated]\n", .{ depth, ctrl.timeElapsed() / std.time.ns_per_ms, pv });
+            try output.print("info depth {} score cp {} {} pv {} string [search terminated]\n", .{ depth, score, ctrl, pv });
             break;
         };
-        try output.print("info depth {} score cp {} time {} pv {}\n", .{ depth, score, ctrl.timeElapsed() / std.time.ns_per_ms, pv });
+        try output.print("info depth {} score cp {} {} pv {}\n", .{ depth, score, ctrl, pv });
         if (ctrl.checkSoftTermination(depth)) break;
     }
     return .{ pv.move, score };
