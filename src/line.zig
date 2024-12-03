@@ -20,7 +20,7 @@ pub const Line = struct {
 
     pub fn write(self: *Line, m: MoveCode, rest: *const Line) void {
         self.pv[0] = m;
-        @memcpy(self.pv[1..rest.len + 1], rest.pv[0 .. rest.len]);
+        @memcpy(self.pv[1 .. rest.len + 1], rest.pv[0..rest.len]);
         self.len = rest.len + 1;
     }
 

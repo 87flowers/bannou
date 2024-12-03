@@ -4,10 +4,7 @@ fn contains(limits: []const Limit, limit: Limit) bool {
 const Limit = enum { time, depth, nodes };
 pub fn Control(
     comptime limits: []const Limit,
-    comptime to_track: struct {
-        track_time: bool = false,
-        track_nodes: bool = false
-    },
+    comptime to_track: struct { track_time: bool = false, track_nodes: bool = false },
 ) type {
     const needs_timer = to_track.track_time or contains(limits, .time);
     const needs_nodes = to_track.track_nodes or contains(limits, .nodes);
@@ -177,7 +174,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, depth:
 }
 
 pub fn go(output: anytype, game: *Game, ctrl: anytype, pv: anytype) !i32 {
-    comptime assert(@typeInfo(@TypeOf(ctrl)) == .pointer and @typeInfo(@TypeOf(pv)) == .pointer );
+    comptime assert(@typeInfo(@TypeOf(ctrl)) == .pointer and @typeInfo(@TypeOf(pv)) == .pointer);
     var depth: i32 = 1;
     var score: i32 = undefined;
     while (depth < 256) : (depth += 1) {
