@@ -14,7 +14,7 @@ pub fn uciGo(output: anytype, game: *Game, tc: TimeControl) !void {
         .white => tc.wtime.?,
         .black => tc.btime.?,
     };
-    const safe_time_remaining = (@max(time_remaining, margin) - margin) * 1_000_000; // nanoseconds
+    const safe_time_remaining = (@max(time_remaining, margin) - margin) * std.time.ns_per_ms; // nanoseconds
     const deadline = safe_time_remaining / movestogo; // nanoseconds
     var info = search.TimeControl.init(deadline / 2, safe_time_remaining / 2);
 

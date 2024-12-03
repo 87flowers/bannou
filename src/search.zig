@@ -184,10 +184,10 @@ pub fn go(output: anytype, game: *Game, ctrl: anytype) !struct { ?MoveCode, i32 
     var score: i32 = undefined;
     while (depth < 256) : (depth += 1) {
         score = search(game, ctrl, &pv, -std.math.maxInt(i32), std.math.maxInt(i32), depth, .firstply) catch {
-            try output.print("info depth {} time {} pv {} string [search terminated]\n", .{ depth, ctrl.timeElapsed(), pv });
+            try output.print("info depth {} time {} pv {} string [search terminated]\n", .{ depth, ctrl.timeElapsed() / std.time.ns_per_ms, pv });
             break;
         };
-        try output.print("info depth {} score cp {} time {} pv {}\n", .{ depth, score, ctrl.timeElapsed(), pv });
+        try output.print("info depth {} score cp {} time {} pv {}\n", .{ depth, score, ctrl.timeElapsed() / std.time.ns_per_ms, pv });
         if (ctrl.checkSoftTermination(depth)) break;
     }
     return .{ pv.move, score };
