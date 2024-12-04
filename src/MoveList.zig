@@ -1,4 +1,4 @@
-moves: [256]Move = undefined,
+moves: [common.max_legal_moves]Move = undefined,
 size: u8 = 0,
 
 pub const MoveGeneratorMode = enum {
@@ -77,7 +77,7 @@ pub fn generateMovesForPiece(self: *MoveList, board: *Board, comptime mode: Move
 }
 
 pub fn sortWithPv(self: *MoveList, pv: MoveCode) void {
-    var sort_scores: [256]i32 = undefined;
+    var sort_scores: [common.max_legal_moves]i32 = undefined;
     for (0..self.size) |i| {
         const m = self.moves[i];
         sort_scores[i] = blk: {
@@ -376,6 +376,7 @@ const MoveList = @This();
 const std = @import("std");
 const assert = std.debug.assert;
 const castle_mask = @import("castle_mask.zig");
+const common = @import("common.zig");
 const coord = @import("coord.zig");
 const getPawnCaptures = @import("common.zig").getPawnCaptures;
 const zhash = @import("zhash.zig");

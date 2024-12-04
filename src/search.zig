@@ -177,7 +177,7 @@ pub fn go(output: anytype, game: *Game, ctrl: anytype, pv: anytype) !i32 {
     comptime assert(@typeInfo(@TypeOf(ctrl)) == .pointer and @typeInfo(@TypeOf(pv)) == .pointer);
     var depth: i32 = 1;
     var score: i32 = undefined;
-    while (depth < 256) : (depth += 1) {
+    while (depth < common.max_search_ply) : (depth += 1) {
         score = search(game, ctrl, pv, -std.math.maxInt(i32), std.math.maxInt(i32), depth, .firstply) catch {
             try output.print("info depth {} score cp {} {} pv {} string [search terminated]\n", .{ depth, score, ctrl, pv });
             break;
@@ -193,6 +193,7 @@ const SearchMode = enum { firstply, normal, nullmove, quiescence };
 
 const std = @import("std");
 const assert = std.debug.assert;
+const common = @import("common.zig");
 const eval = @import("eval.zig");
 const line = @import("line.zig");
 const Game = @import("Game.zig");

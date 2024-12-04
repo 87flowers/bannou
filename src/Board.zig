@@ -3,7 +3,17 @@ where: [32]u8,
 board: [128]Place,
 state: State,
 active_color: Color,
-zhistory: [1024]u64,
+zhistory: [common.max_game_ply]u64,
+
+pub fn copyFrom(self: *Board, other: *const Board) void {
+    self.pieces = other.pieces;
+    self.where = other.where;
+    self.board = other.board;
+    self.state = other.state;
+    self.active_color = other.active_color;
+    const zhistory_len = other.state.ply + 1;
+    @memcpy(self.zhistory[0..zhistory_len], self.zhistory[0..zhistory_len]);
+}
 
 pub fn emptyBoard() Board {
     return comptime blk: {
@@ -532,6 +542,7 @@ const Board = @This();
 const std = @import("std");
 const assert = std.debug.assert;
 const getPawnCaptures = @import("common.zig").getPawnCaptures;
+const common = @import("common.zig");
 const coord = @import("coord.zig");
 const zhash = @import("zhash.zig");
 const Color = @import("common.zig").Color;

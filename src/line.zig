@@ -7,7 +7,7 @@ pub const Null = struct {
 };
 
 pub const Line = struct {
-    pv: [256]MoveCode = undefined,
+    pv: [common.max_search_ply]MoveCode = undefined,
     len: usize = 0,
 
     pub fn newChild(_: *Line) Line {
@@ -50,5 +50,6 @@ pub const RootMove = struct {
 };
 
 const std = @import("std");
+const common = @import("common.zig");
 const MoveCode = @import("MoveCode.zig");
 const SearchMode = @import("search.zig").SearchMode;

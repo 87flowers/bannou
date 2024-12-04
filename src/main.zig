@@ -12,7 +12,7 @@ const Uci = struct {
     output: std.fs.File.Writer,
 
     base_position: Board = Board.defaultBoard(),
-    move_history: [512]MoveCode = undefined,
+    move_history: [common.max_game_ply]MoveCode = undefined,
     move_history_len: usize = 0,
 
     fn go(self: *Uci, tc: TimeControl) !void {
@@ -48,7 +48,7 @@ const Uci = struct {
             const ply = it.next() orelse "";
             g.board = Board.parseParts(board_str, color, castling, enpassant, no_capture_clock, ply) catch
                 return self.output.print("info string Error: Invalid FEN for position command\n", .{});
-            self.base_position = g.board;
+            self.base_position.copyFrom(&g.board);
         } else {
             try self.output.print("info string Error: Invalid position type '{s}' for position command\n", .{pos_type});
             return;
@@ -68,6 +68,18 @@ const Uci = struct {
         self.move_history[self.move_history_len] = code;
         self.move_history_len += 1;
         return true;
+    }
+
+    fn uciParseUndo(self: *Uci, it: *Iterator) !void {
+        const count = std.fmt.parseUnsigned(usize, it.next() orelse "1", 10) catch
+            return self.output.print("info string Error: Invalid argument to undo\n", .{});
+        self.move_history_len = self.move_history_len -| count;
+
+        // Replay up to current position
+        g.board.copyFrom(&self.base_position);
+        for (self.move_history[0..self.move_history_len]) |code| {
+            _ = g.board.makeMoveByCode(code);
+        }
     }
 
     fn uciParseMoveSequence(self: *Uci, it: *Iterator) !void {
@@ -152,6 +164,8 @@ const Uci = struct {
             try g.board.debugPrint(self.output);
         } else if (std.mem.eql(u8, command, "l.move")) {
             try self.uciParseMoveSequence(&it);
+        } else if (std.mem.eql(u8, command, "undo")) {
+            try self.uciParseUndo(&it);
         } else if (std.mem.eql(u8, command, "l.perft")) {
             try self.uciParsePerft(&it);
         } else if (std.mem.eql(u8, command, "l.bestmove")) {
@@ -183,6 +197,7 @@ pub fn main() !void {
 const std = @import("std");
 const assert = std.debug.assert;
 const cmd_perft = @import("cmd_perft.zig");
+const common = @import("common.zig");
 const eval = @import("eval.zig");
 const line = @import("line.zig");
 const search = @import("search.zig");
