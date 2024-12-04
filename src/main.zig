@@ -162,19 +162,19 @@ const Uci = struct {
             std.process.exit(0);
         } else if (std.mem.eql(u8, command, "d")) {
             try g.board.debugPrint(self.output);
-        } else if (std.mem.eql(u8, command, "l.move")) {
+        } else if (std.mem.eql(u8, command, "move")) {
             try self.uciParseMoveSequence(&it);
         } else if (std.mem.eql(u8, command, "undo")) {
             try self.uciParseUndo(&it);
-        } else if (std.mem.eql(u8, command, "l.perft")) {
+        } else if (std.mem.eql(u8, command, "perft") or std.mem.eql(u8, command, "l.perft")) {
             try self.uciParsePerft(&it);
-        } else if (std.mem.eql(u8, command, "l.bestmove")) {
+        } else if (std.mem.eql(u8, command, "bestmove")) {
             try self.uciParseBestMove(&it, .print_only);
-        } else if (std.mem.eql(u8, command, "l.auto")) {
+        } else if (std.mem.eql(u8, command, "auto")) {
             try self.uciParseBestMove(&it, .make_move);
-        } else if (std.mem.eql(u8, command, "l.eval")) {
+        } else if (std.mem.eql(u8, command, "eval")) {
             try self.output.print("score cp {}\n", .{eval.eval(&g)});
-        } else if (std.mem.eql(u8, command, "l.history")) {
+        } else if (std.mem.eql(u8, command, "history")) {
             for (g.board.zhistory[0 .. g.board.state.ply + 1], 0..) |h, i| {
                 try self.output.print("{}: {X}\n", .{ i, h });
             }
