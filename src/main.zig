@@ -11,6 +11,10 @@ var g = Game{};
 const Uci = struct {
     output: std.fs.File.Writer,
 
+    base_position: Board = Board.defaultBoard(),
+    move_history: [512]MoveCode = undefined,
+    move_history_len: usize = 0,
+
     fn go(self: *Uci, tc: TimeControl) !void {
         const margin = 100;
         const movestogo = tc.movestogo orelse 30;
@@ -34,6 +38,7 @@ const Uci = struct {
         const pos_type = it.next() orelse "startpos";
         if (std.mem.eql(u8, pos_type, "startpos")) {
             g.board = Board.defaultBoard();
+            self.base_position = Board.defaultBoard();
         } else if (std.mem.eql(u8, pos_type, "fen")) {
             const board_str = it.next() orelse "";
             const color = it.next() orelse "";
@@ -43,11 +48,13 @@ const Uci = struct {
             const ply = it.next() orelse "";
             g.board = Board.parseParts(board_str, color, castling, enpassant, no_capture_clock, ply) catch
                 return self.output.print("info string Error: Invalid FEN for position command\n", .{});
+            self.base_position = g.board;
         } else {
             try self.output.print("info string Error: Invalid position type '{s}' for position command\n", .{pos_type});
             return;
         }
 
+        self.move_history_len = 0;
         if (it.next()) |moves_str| {
             if (!std.mem.eql(u8, moves_str, "moves"))
                 return self.output.print("info string Error: Unexpected token '{s}' in position command\n", .{moves_str});
@@ -55,11 +62,19 @@ const Uci = struct {
         }
     }
 
+    fn uciMakeMove(self: *Uci, code: MoveCode) bool {
+        if (!g.board.makeMoveByCode(code))
+            return false;
+        self.move_history[self.move_history_len] = code;
+        self.move_history_len += 1;
+        return true;
+    }
+
     fn uciParseMoveSequence(self: *Uci, it: *Iterator) !void {
         while (it.next()) |move_str| {
             const code = MoveCode.parse(move_str) catch
                 return self.output.print("info string Error: Invalid movecode '{s}'\n", .{move_str});
-            if (!g.board.makeMoveByCode(code)) {
+            if (!self.uciMakeMove(code)) {
                 try self.output.print("info string Error: Illegal move '{}' in position {}\n", .{ code, g.board });
                 return;
             }
@@ -104,7 +119,7 @@ const Uci = struct {
         try self.output.print("score cp {} pv {}\n", .{ score, pv });
         if (make_move == .make_move) {
             if (pv.len > 0) {
-                _ = g.board.makeMoveByCode(pv.pv[0]);
+                _ = self.uciMakeMove(pv.pv[0]);
             } else {
                 try self.output.print("No valid move.\n", .{});
             }
