@@ -1,67 +1,52 @@
-fn contains(limits: []const Limit, limit: Limit) bool {
-    return std.mem.containsAtLeast(Limit, limits, 1, &.{limit});
-}
-const Limit = enum { time, depth, nodes };
-pub fn Control(
-    comptime limits: []const Limit,
-    comptime to_track: struct { track_time: bool = false, track_nodes: bool = false },
-) type {
-    const needs_timer = to_track.track_time or contains(limits, .time);
-    const needs_nodes = to_track.track_nodes or contains(limits, .nodes);
-    const has_time_limit = contains(limits, .time);
-    const has_depth_limit = contains(limits, .depth);
-    const has_nodes_limit = contains(limits, .nodes);
-
+pub fn Control(comptime limit: struct {
+    time: bool = false,
+    depth: bool = false,
+    nodes: bool = false,
+}) type {
     return struct {
-        timer: if (needs_timer) std.time.Timer else void,
-        nodes: if (needs_nodes) u64 else void,
-        time_limit: if (has_time_limit) struct { soft_deadline: u64, hard_deadline: u64 } else void,
-        depth_limit: if (has_depth_limit) struct { target_depth: i32 } else void,
-        nodes_limit: if (has_nodes_limit) struct { target_nodes: i32 } else void,
+        timer: std.time.Timer,
+        nodes: u64,
+        time_limit: if (limit.time) struct { soft_deadline: u64, hard_deadline: u64 } else void,
+        depth_limit: if (limit.depth) struct { target_depth: i32 } else void,
+        nodes_limit: if (limit.nodes) struct { target_nodes: i32 } else void,
 
         pub fn init(args: anytype) @This() {
             return .{
-                .timer = if (needs_timer) std.time.Timer.start() catch unreachable else {},
-                .nodes = if (needs_nodes) 0 else {},
-                .time_limit = if (has_time_limit) .{ .soft_deadline = args.soft_deadline, .hard_deadline = args.hard_deadline } else {},
-                .depth_limit = if (has_depth_limit) .{ .target_depth = args.target_depth } else {},
-                .nodes_limit = if (has_nodes_limit) .{ .target_nodes = args.target_nodes } else {},
+                .timer = std.time.Timer.start() catch @panic("timer unsupported on platform"),
+                .nodes = 0,
+                .time_limit = if (limit.time) .{ .soft_deadline = args.soft_deadline, .hard_deadline = args.hard_deadline } else {},
+                .depth_limit = if (limit.depth) .{ .target_depth = args.target_depth } else {},
+                .nodes_limit = if (limit.nodes) .{ .target_nodes = args.target_nodes } else {},
             };
         }
 
         pub fn nodeVisited(self: *@This()) void {
-            if (needs_nodes) self.nodes += 1;
+            self.nodes += 1;
         }
 
         /// Returns true if we should terminate the search
         pub fn checkSoftTermination(self: *@This(), depth: i32) bool {
-            if (has_time_limit and self.time_limit.soft_deadline <= self.timer.read()) return true;
-            if (has_depth_limit and depth >= self.depth_limit.target_depth) return true;
-            if (has_nodes_limit and self.nodes >= self.nodes_limit.target_nodes) return true;
+            if (limit.time and self.time_limit.soft_deadline <= self.timer.read()) return true;
+            if (limit.depth and depth >= self.depth_limit.target_depth) return true;
+            if (limit.nodes and self.nodes >= self.nodes_limit.target_nodes) return true;
             return false;
         }
 
         /// Raises SearchError.EarlyTermination if we should terminate the search
         pub fn checkHardTermination(self: *@This(), comptime mode: SearchMode, depth: i32) SearchError!void {
-            if (has_time_limit and mode == .normal and depth > 3 and self.time_limit.hard_deadline <= self.timer.read()) return SearchError.EarlyTermination;
-            if (has_nodes_limit and self.nodes >= self.nodes_limit.target_nodes) return SearchError.EarlyTermination;
+            if (limit.time and mode == .normal and depth > 3 and self.time_limit.hard_deadline <= self.timer.read()) return SearchError.EarlyTermination;
+            if (limit.nodes and self.nodes >= self.nodes_limit.target_nodes) return SearchError.EarlyTermination;
         }
 
         pub fn format(self: *@This(), comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
-            if (needs_timer and needs_nodes) {
-                const nps = self.nodes * std.time.ns_per_s / self.timer.read();
-                try writer.print("time {} nodes {} nps {}", .{ self.timer.read() / std.time.ns_per_ms, self.nodes, nps });
-            } else if (needs_timer) {
-                try writer.print("time {}", .{self.timer.read() / std.time.ns_per_ms});
-            } else if (needs_nodes) {
-                try writer.print("nodes {}", .{self.nodes});
-            }
+            const nps = self.nodes * std.time.ns_per_s / self.timer.read();
+            try writer.print("time {} nodes {} nps {}", .{ self.timer.read() / std.time.ns_per_ms, self.nodes, nps });
         }
     };
 }
 
-pub const TimeControl = Control(&.{.time}, .{});
-pub const DepthControl = Control(&.{.depth}, .{});
+pub const TimeControl = Control(.{ .time = true });
+pub const DepthControl = Control(.{ .depth = true });
 
 fn search2(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, depth: i32, comptime mode: SearchMode) SearchError!i32 {
     return if (mode != .quiescence and depth <= 0)

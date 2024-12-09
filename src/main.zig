@@ -125,7 +125,7 @@ const Uci = struct {
     fn uciParseBestMove(self: *Uci, it: *Iterator, make_move: enum { make_move, print_only }) !void {
         const depth = std.fmt.parseInt(i32, it.next() orelse "1", 10) catch
             return self.output.print("info string Error: Invalid argument to l.perft\n", .{});
-        var ctrl = search.Control(&.{.depth}, .{ .track_time = true, .track_nodes = true }).init(.{ .target_depth = depth });
+        var ctrl = search.DepthControl.init(.{ .target_depth = depth });
         var pv = line.Line{};
         const score = try search.go(self.output, &g, &ctrl, &pv);
         try self.output.print("score cp {} pv {}\n", .{ score, pv });
@@ -151,7 +151,7 @@ const Uci = struct {
             g = .{};
         } else if (std.mem.eql(u8, command, "uci")) {
             try self.output.print("{s}\n", .{
-                \\id name Bannou 0.18
+                \\id name Bannou 0.19
                 \\id author 87 (87flowers.com)
                 \\uciok
             });
