@@ -148,7 +148,7 @@ const Uci = struct {
         } else if (std.mem.eql(u8, command, "isready")) {
             try self.output.print("readyok\n", .{});
         } else if (std.mem.eql(u8, command, "ucinewgame")) {
-            g = .{};
+            g.reset();
         } else if (std.mem.eql(u8, command, "uci")) {
             try self.output.print("{s}\n", .{
                 \\id name Bannou 0.19
@@ -168,6 +168,8 @@ const Uci = struct {
             try self.uciParseUndo(&it);
         } else if (std.mem.eql(u8, command, "perft") or std.mem.eql(u8, command, "l.perft")) {
             try self.uciParsePerft(&it);
+        } else if (std.mem.eql(u8, command, "bench")) {
+            try cmd_bench.run(self.output, &g);
         } else if (std.mem.eql(u8, command, "bestmove")) {
             try self.uciParseBestMove(&it, .print_only);
         } else if (std.mem.eql(u8, command, "auto")) {
@@ -196,6 +198,7 @@ pub fn main() !void {
 
 const std = @import("std");
 const assert = std.debug.assert;
+const cmd_bench = @import("cmd_bench.zig");
 const cmd_perft = @import("cmd_perft.zig");
 const common = @import("common.zig");
 const eval = @import("eval.zig");

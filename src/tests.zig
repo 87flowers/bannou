@@ -1,6 +1,7 @@
 comptime {
     // root
     _ = @import("castle_mask.zig");
+    _ = @import("cmd_bench.zig");
     _ = @import("cmd_perft.zig");
     _ = @import("common.zig");
     _ = @import("coord.zig");
