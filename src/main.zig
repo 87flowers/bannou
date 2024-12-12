@@ -189,8 +189,9 @@ const Uci = struct {
 pub fn main() !void {
     var uci = Uci{ .output = std.io.getStdOut().writer() };
 
+    const buffer_size = common.max_game_ply * 5;
     var input = std.io.getStdIn().reader();
-    var buffer: [2048]u8 = undefined;
+    var buffer: [buffer_size]u8 = undefined;
     while (try input.readUntilDelimiterOrEof(&buffer, '\n')) |input_line| {
         try uci.uciParseCommand(input_line);
     }
