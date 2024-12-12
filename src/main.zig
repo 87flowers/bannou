@@ -151,7 +151,7 @@ const Uci = struct {
             g.reset();
         } else if (std.mem.eql(u8, command, "uci")) {
             try self.output.print("{s}\n", .{
-                \\id name Bannou 0.19
+                \\id name Bannou 0.20
                 \\id author 87 (87flowers.com)
                 \\uciok
             });
