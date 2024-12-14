@@ -12,7 +12,6 @@ fn add(b: *std.Build, target: ResolvedTarget, optimize: OptimizeMode, step_cmd: 
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
-    run_cmd.step.dependOn(b.getInstallStep());
     if (b.args) |args| {
         run_cmd.addArgs(args);
     }
@@ -34,6 +33,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     add(b, target, optimize, "run", "Run chess engine", "bannou", "src/main.zig");
+    add(b, target, optimize, "generate-psts", "Generate piece square tables", "generate_psts", "src/generate_psts.zig");
 
     addTests(b);
 }
