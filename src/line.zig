@@ -1,4 +1,8 @@
 pub const Null = struct {
+    pub inline fn new(_: *const Null) Null {
+        return .{};
+    }
+    pub inline fn copyFrom(_: *const Null, _: *const Null) void {}
     pub inline fn newChild(_: *const Null) Null {
         return .{};
     }
@@ -9,6 +13,15 @@ pub const Null = struct {
 pub const Line = struct {
     pv: [common.max_search_ply]MoveCode = undefined,
     len: usize = 0,
+
+    pub inline fn new(_: *const Line) Line {
+        return .{};
+    }
+
+    pub fn copyFrom(self: *Line, from: *const Line) void {
+        self.len = from.len;
+        @memcpy(self.pv[0..from.len], from.pv[0..from.len]);
+    }
 
     pub fn newChild(_: *Line) Line {
         return .{};
@@ -31,6 +44,14 @@ pub const Line = struct {
 
 pub const RootMove = struct {
     move: ?MoveCode = null,
+
+    pub inline fn new(_: *const RootMove) RootMove {
+        return .{};
+    }
+
+    pub fn copyFrom(self: *RootMove, from: *const RootMove) void {
+        self.move = from.move;
+    }
 
     pub fn newChild(_: *RootMove) Null {
         return Null{};

@@ -179,11 +179,13 @@ pub fn go(output: anytype, game: *Game, ctrl: anytype, pv: anytype) !i32 {
     comptime assert(@typeInfo(@TypeOf(ctrl)) == .pointer and @typeInfo(@TypeOf(pv)) == .pointer);
     var depth: i32 = 1;
     var score: i32 = undefined;
+    var current_pv = pv.new();
     while (depth < common.max_search_ply) : (depth += 1) {
-        score = forDepth(game, ctrl, pv, depth, score) catch {
+        score = forDepth(game, ctrl, &current_pv, depth, score) catch {
             try output.print("info depth {} score cp {} {} pv {} string [search terminated]\n", .{ depth, score, ctrl, pv });
             break;
         };
+        pv.copyFrom(&current_pv);
         try output.print("info depth {} score cp {} {} pv {}\n", .{ depth, score, ctrl, pv });
         if (ctrl.checkSoftTermination(depth)) break;
     }
