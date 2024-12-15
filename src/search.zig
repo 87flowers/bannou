@@ -69,7 +69,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, depth:
         if (tte.depth >= depth) {
             const pass = switch (tte.bound) {
                 .lower => tte.score >= beta,
-                .exact => alpha + 1 == beta,
+                .exact => false,
                 .upper => tte.score <= alpha,
             };
             if (pass) {
