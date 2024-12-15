@@ -110,6 +110,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, depth:
     }
     moves.sortWithPv(tte.best_move);
 
+    var moves_visited: usize = 0;
     for (0..moves.size) |i| {
         const m = moves.moves[i];
         const old_state = game.board.move(m);
@@ -117,10 +118,19 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, depth:
         defer game.board.unmove(m, old_state);
         if (game.board.isValid()) {
             var child_pv = pv.newChild();
-            const child_score = if (game.board.isRepeatedPosition() or game.board.is50MoveExpired())
-                0
-            else
-                -try search2(game, ctrl, &child_pv, -beta, -@max(alpha, best_score), depth - 1, mode);
+            const child_score = blk: {
+                if (game.board.isRepeatedPosition() or game.board.is50MoveExpired()) break :blk 0;
+
+                const a = @max(alpha, best_score);
+                if (mode != .quiescence and moves_visited != 0 and beta != alpha + 1) {
+                    const scout_score = -try search2(game, ctrl, &child_pv, -a-1, -a, depth - 1, mode);
+                    if (scout_score <= a or scout_score >= beta) break :blk scout_score;
+                }
+                break :blk -try search2(game, ctrl, &child_pv, -beta, -a, depth - 1, mode);
+            };
+
+            moves_visited += 1;
+
             if (child_score > best_score) {
                 best_score = child_score;
                 best_move = m.code;
