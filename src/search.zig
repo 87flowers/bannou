@@ -158,12 +158,29 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, depth:
     return best_score;
 }
 
+fn forDepth(game: *Game, ctrl: anytype, pv: anytype, depth: i32, prev_score: i32) SearchError!i32 {
+    const min_window = -std.math.maxInt(i32);
+    const max_window = std.math.maxInt(i32);
+
+    if (depth > 3) {
+        // Aspiration window
+        const delta = 100;
+        const lower = @max(min_window, prev_score -| delta);
+        const upper = @min(max_window, prev_score +| delta);
+        const aspiration_score = try search(game, ctrl, pv, lower, upper, depth, .firstply);
+        if (lower < aspiration_score and aspiration_score < upper) return aspiration_score;
+    }
+
+    // Full window
+    return try search(game, ctrl, pv, min_window, max_window, depth, .firstply);
+}
+
 pub fn go(output: anytype, game: *Game, ctrl: anytype, pv: anytype) !i32 {
     comptime assert(@typeInfo(@TypeOf(ctrl)) == .pointer and @typeInfo(@TypeOf(pv)) == .pointer);
     var depth: i32 = 1;
     var score: i32 = undefined;
     while (depth < common.max_search_ply) : (depth += 1) {
-        score = search(game, ctrl, pv, -std.math.maxInt(i32), std.math.maxInt(i32), depth, .firstply) catch {
+        score = forDepth(game, ctrl, pv, depth, score) catch {
             try output.print("info depth {} score cp {} {} pv {} string [search terminated]\n", .{ depth, score, ctrl, pv });
             break;
         };
