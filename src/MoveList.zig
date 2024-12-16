@@ -80,23 +80,26 @@ pub fn sortWith(self: *MoveList, specials: struct {
     tt: MoveCode,
     killer: MoveCode,
 }) void {
-    var sort_scores: [common.max_legal_moves]i32 = undefined;
+    var sort_scores: [common.max_legal_moves]u32 = undefined;
     for (0..self.size) |i| {
         const m = self.moves[i];
         sort_scores[i] = blk: {
-            if (m.code.code == specials.tt.code) break :blk std.math.maxInt(i32);
-            if (m.isCapture()) break :blk 100000 + @as(i32, @intFromEnum(m.capture_place.ptype)) - @as(i32, @intFromEnum(m.src_ptype));
-            if (m.code.code == specials.killer.code) break :blk 10;
+            if (m.code.code == specials.tt.code)
+                break :blk @as(u32, 255 << 24);
+            if (m.isCapture())
+                break :blk @as(u32, 200 << 24) + (@as(u32, @intFromEnum(m.capture_place.ptype)) << 8) - @intFromEnum(m.src_ptype);
+            if (m.code.code == specials.killer.code)
+                break :blk @as(u32, 199 << 24);
             break :blk 0;
         };
     }
     self.sortInOrder(&sort_scores);
 }
 
-fn sortInOrder(self: *MoveList, order: []i32) void {
+fn sortInOrder(self: *MoveList, order: []u32) void {
     const Context = struct {
         ml: *MoveList,
-        order: []i32,
+        order: []u32,
 
         pub fn lessThan(ctx: @This(), a: usize, b: usize) bool {
             return ctx.order[a] > ctx.order[b];
@@ -104,7 +107,7 @@ fn sortInOrder(self: *MoveList, order: []i32) void {
 
         pub fn swap(ctx: @This(), a: usize, b: usize) void {
             std.mem.swap(Move, &ctx.ml.moves[a], &ctx.ml.moves[b]);
-            std.mem.swap(i32, &ctx.order[a], &ctx.order[b]);
+            std.mem.swap(u32, &ctx.order[a], &ctx.order[b]);
         }
     };
     std.sort.heapContext(0, self.size, Context{ .ml = self, .order = order });
