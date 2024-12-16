@@ -76,13 +76,17 @@ pub fn generateMovesForPiece(self: *MoveList, board: *Board, comptime mode: Move
     }
 }
 
-pub fn sortWithPv(self: *MoveList, pv: MoveCode) void {
+pub fn sortWith(self: *MoveList, specials: struct {
+    tt: MoveCode,
+    killer: MoveCode,
+}) void {
     var sort_scores: [common.max_legal_moves]i32 = undefined;
     for (0..self.size) |i| {
         const m = self.moves[i];
         sort_scores[i] = blk: {
-            if (m.code.code == pv.code) break :blk std.math.maxInt(i32);
+            if (m.code.code == specials.tt.code) break :blk std.math.maxInt(i32);
             if (m.isCapture()) break :blk 100000 + @as(i32, @intFromEnum(m.capture_place.ptype)) - @as(i32, @intFromEnum(m.src_ptype));
+            if (m.code.code == specials.killer.code) break :blk 10;
             break :blk 0;
         };
     }

@@ -1,5 +1,7 @@
 code: u16,
 
+pub const none = MoveCode{ .code = 0 };
+
 pub fn make(src_ptype: PieceType, src_coord: u8, dest_ptype: PieceType, dest_coord: u8) MoveCode {
     return .{
         .code = @as(u16, coord.compress(src_coord)) << 9 |

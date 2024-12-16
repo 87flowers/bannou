@@ -48,16 +48,16 @@ pub fn Control(comptime limit: struct {
 pub const TimeControl = Control(.{ .time = true });
 pub const DepthControl = Control(.{ .depth = true });
 
-fn search2(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, depth: i32, comptime mode: SearchMode) SearchError!i32 {
+fn search2(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: u32, depth: i32, comptime mode: SearchMode) SearchError!i32 {
     return if (mode != .quiescence and depth <= 0)
-        try search(game, ctrl, pv, alpha, beta, depth, .quiescence)
+        try search(game, ctrl, pv, alpha, beta, ply, depth, .quiescence)
     else if (mode == .firstply)
-        try search(game, ctrl, pv, alpha, beta, depth, .normal)
+        try search(game, ctrl, pv, alpha, beta, ply, depth, .normal)
     else
-        try search(game, ctrl, pv, alpha, beta, depth, mode);
+        try search(game, ctrl, pv, alpha, beta, ply, depth, mode);
 }
 
-fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, depth: i32, comptime mode: SearchMode) SearchError!i32 {
+fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: u32, depth: i32, comptime mode: SearchMode) SearchError!i32 {
     // Preconditions for optimizer to be aware of.
     if (mode != .quiescence) assert(depth > 0);
     if (mode == .quiescence) assert(depth <= 0);
@@ -97,7 +97,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, depth:
     // Null-move pruning
     if (!game.board.isInCheck() and (mode == .normal or mode == .nullmove) and depth > 2 and static_eval >= beta) {
         const old_state = game.board.moveNull();
-        const null_score = -try search2(game, ctrl, line.Null{}, -beta, -beta +| 1, depth - 4, .normal);
+        const null_score = -try search2(game, ctrl, line.Null{}, -beta, -beta +| 1, ply + 1, depth - 4, .normal);
         game.board.unmoveNull(old_state);
         if (null_score >= beta) {
             if (mode == .nullmove) {
@@ -109,7 +109,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, depth:
             // This is the same as a normal search except:
             // - With a "pruneable" flag set (the .nullmove mode)
             // - Depth reduced by 1
-            return search(game, ctrl, line.Null{}, alpha, beta, depth - 1, .nullmove);
+            return search(game, ctrl, line.Null{}, alpha, beta, ply, depth - 1, .nullmove);
         }
     }
 
@@ -118,7 +118,10 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, depth:
         .firstply, .normal, .nullmove => moves.generateMoves(&game.board, .any),
         .quiescence => moves.generateMoves(&game.board, .captures_only),
     }
-    moves.sortWithPv(tte.best_move);
+    moves.sortWith(.{
+        .tt = tte.best_move,
+        .killer = game.killers[ply],
+    });
 
     var moves_visited: usize = 0;
     for (0..moves.size) |i| {
@@ -132,10 +135,10 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, depth:
 
                 const a = @max(alpha, best_score);
                 if (mode != .quiescence and moves_visited != 0 and beta != alpha + 1) {
-                    const scout_score = -try search2(game, ctrl, &child_pv, -a-1, -a, depth - 1, mode);
+                    const scout_score = -try search2(game, ctrl, &child_pv, -a - 1, -a, ply + 1, depth - 1, mode);
                     if (scout_score <= a or scout_score >= beta) break :blk scout_score;
                 }
-                break :blk -try search2(game, ctrl, &child_pv, -beta, -a, depth - 1, mode);
+                break :blk -try search2(game, ctrl, &child_pv, -beta, -a, ply + 1, depth - 1, mode);
             };
 
             ctrl.nodeVisited();
@@ -145,7 +148,14 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, depth:
                 best_score = child_score;
                 best_move = m.code;
                 pv.write(best_move, &child_pv);
-                if (child_score >= beta) break;
+
+                if (child_score >= beta) {
+                    // Record killer move
+                    if (!m.isTactical()) {
+                        game.insertKillerMove(ply, best_move);
+                    }
+                    break;
+                }
             }
         }
     }
@@ -189,7 +199,7 @@ fn forDepth(game: *Game, ctrl: anytype, pv: anytype, depth: i32, prev_score: i32
         var lower = @max(min_window, prev_score -| delta);
         var upper = @min(max_window, prev_score +| delta);
         while (true) : (delta *= 2) {
-            score = try search(game, ctrl, pv, lower, upper, depth, .firstply);
+            score = try search(game, ctrl, pv, lower, upper, 0, depth, .firstply);
             if (score <= lower) {
                 lower = @max(min_window, score -| delta);
             } else if (score >= upper) {
@@ -201,7 +211,7 @@ fn forDepth(game: *Game, ctrl: anytype, pv: anytype, depth: i32, prev_score: i32
     }
 
     // Full window
-    return try search(game, ctrl, pv, min_window, max_window, depth, .firstply);
+    return try search(game, ctrl, pv, min_window, max_window, 0, depth, .firstply);
 }
 
 pub fn go(output: anytype, game: *Game, ctrl: anytype, pv: anytype) !i32 {
