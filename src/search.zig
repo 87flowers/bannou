@@ -173,12 +173,21 @@ fn forDepth(game: *Game, ctrl: anytype, pv: anytype, depth: i32, prev_score: i32
     const max_window = std.math.maxInt(i32);
 
     if (depth > 3) {
-        // Aspiration window
-        const delta = 100;
-        const lower = @max(min_window, prev_score -| delta);
-        const upper = @min(max_window, prev_score +| delta);
-        const aspiration_score = try search(game, ctrl, pv, lower, upper, depth, .firstply);
-        if (lower < aspiration_score and aspiration_score < upper) return aspiration_score;
+        // Aspiration windows
+        var score = prev_score;
+        var delta: i32 = 25;
+        var lower = @max(min_window, prev_score -| delta);
+        var upper = @min(max_window, prev_score +| delta);
+        while (true) : (delta *= 2) {
+            score = try search(game, ctrl, pv, lower, upper, depth, .firstply);
+            if (score <= lower) {
+                lower = @max(min_window, score -| delta);
+            } else if (score >= upper) {
+                upper = @min(max_window, score +| delta);
+            } else {
+                return score;
+            }
+        }
     }
 
     // Full window
