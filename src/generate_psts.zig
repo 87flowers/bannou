@@ -55,7 +55,7 @@ fn phaseFromCase(case: *const Case) f64 {
 
 // convert centipawn to win probability
 fn rescaleEval(cp: f64) f64 {
-    const p = 1 / (1 + @exp(-cp / 400));
+    const p = 1 / (1 + @exp(-cp / 91.02392266268372));
     return 2 * p - 1;
 }
 
@@ -100,7 +100,7 @@ fn caseGradient(features: []const Feature, coefficients: []const f64, gradient: 
     for (1..len + 1) |i| {
         gradient[features[i].index] += features[i].weight * err;
     }
-    return .{ err, features[len + 1..] };
+    return .{ err, features[len + 1 ..] };
 }
 
 const DataSet = struct {
@@ -190,7 +190,7 @@ pub fn main() !void {
         }
         std.debug.print("\n", .{});
 
-        const alpha = 100 * @exp(-@as(f64, @floatFromInt(i))/1000);
+        const alpha = 100 * @exp(-@as(f64, @floatFromInt(i)) / 1000);
         const beta1 = 0.99;
         const beta2 = 0.999;
         const epsilon = 1e-9;
