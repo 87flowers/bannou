@@ -124,7 +124,6 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, depth:
     for (0..moves.size) |i| {
         const m = moves.moves[i];
         const old_state = game.board.move(m);
-        ctrl.nodeVisited();
         defer game.board.unmove(m, old_state);
         if (game.board.isValid()) {
             var child_pv = pv.newChild();
@@ -139,6 +138,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, depth:
                 break :blk -try search2(game, ctrl, &child_pv, -beta, -a, depth - 1, mode);
             };
 
+            ctrl.nodeVisited();
             moves_visited += 1;
 
             if (child_score > best_score) {
