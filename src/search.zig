@@ -79,27 +79,37 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, depth:
         }
     }
 
+    const static_eval = eval.eval(game);
+
     const no_moves = -std.math.maxInt(i32);
-    var best_score: i32 = switch (mode) {
-        .firstply, .normal, .nullmove => no_moves,
-        .quiescence => eval.eval(game),
-    };
+    var best_score: i32 = no_moves;
     var best_move: MoveCode = tte.best_move;
 
-    // Check stand-pat score for beta cut-off (avoid move generation)
-    if (mode == .quiescence and best_score >= beta) {
-        pv.writeEmpty();
-        return best_score;
+    if (mode == .quiescence) {
+        best_score = static_eval;
+        // Check stand-pat score for beta cut-off (avoid move generation)
+        if (static_eval >= beta) {
+            pv.writeEmpty();
+            return best_score;
+        }
     }
 
     // Null-move pruning
-    if (mode == .normal and !game.board.isInCheck() and depth > 4) {
+    if (!game.board.isInCheck() and (mode == .normal or mode == .nullmove) and depth > 2 and static_eval >= beta) {
         const old_state = game.board.moveNull();
-        defer game.board.unmoveNull(old_state);
-        const null_score = -try search2(game, ctrl, line.Null{}, -beta, -beta + 1, depth - 3, .nullmove);
+        const null_score = -try search2(game, ctrl, line.Null{}, -beta, -beta +| 1, depth - 4, .normal);
+        game.board.unmoveNull(old_state);
         if (null_score >= beta) {
-            pv.writeEmpty();
-            return null_score;
+            if (mode == .nullmove) {
+                // Failed high twice, prune
+                pv.writeEmpty();
+                return null_score;
+            }
+            // Subtree verification search
+            // This is the same as a normal search except:
+            // - With a "pruneable" flag set (the .nullmove mode)
+            // - Depth reduced by 1
+            return search(game, ctrl, line.Null{}, alpha, beta, depth - 1, .nullmove);
         }
     }
 
