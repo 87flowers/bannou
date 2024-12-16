@@ -13,6 +13,14 @@ pub fn isCapture(self: *const Move) bool {
     return self.capture_place != Place.empty;
 }
 
+pub fn isPromotion(self: *const Move) bool {
+    return self.src_ptype != self.dest_ptype;
+}
+
+pub fn isTactical(self: *const Move) bool {
+    return self.isCapture() or self.isPromotion();
+}
+
 pub fn format(self: *const Move, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
     try writer.print("{}", .{self.code});
 }
