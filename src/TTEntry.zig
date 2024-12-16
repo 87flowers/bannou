@@ -1,4 +1,4 @@
-hash: u64,
+hash: Hash,
 best_move: MoveCode,
 depth: u8,
 bound: Bound,
@@ -21,4 +21,5 @@ test {
 const TTEntry = @This();
 const std = @import("std");
 const assert = std.debug.assert;
+const Hash = @import("zhash.zig").Hash;
 const MoveCode = @import("MoveCode.zig");

@@ -34,6 +34,7 @@ pub fn build(b: *std.Build) void {
 
     add(b, target, optimize, "run", "Run chess engine", "bannou", "src/main.zig");
     add(b, target, optimize, "generate-psts", "Generate piece square tables", "generate_psts", "src/generate_psts.zig");
+    add(b, target, optimize, "generate-zhash", "Generate Zobrist hash tables", "generate_zhash", "src/generate_zhash.zig");
 
     addTests(b);
 }

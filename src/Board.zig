@@ -3,7 +3,7 @@ where: [32]u8,
 board: [128]Place,
 state: State,
 active_color: Color,
-zhistory: [common.max_game_ply]u64,
+zhistory: [common.max_game_ply]Hash,
 
 pub fn copyFrom(self: *Board, other: *const Board) void {
     self.pieces = other.pieces;
@@ -39,6 +39,7 @@ pub fn emptyBoard() Board {
 
 pub fn defaultBoard() Board {
     return comptime blk: {
+        @setEvalBranchQuota(10000);
         var result = emptyBoard();
         result.place(0x01, .r, 0x00);
         result.place(0x03, .n, 0x01);
@@ -84,6 +85,7 @@ pub fn place(self: *Board, id: u5, ptype: PieceType, where: u8) void {
     self.board[where] = Place{ .ptype = ptype, .id = id };
     self.state.hash ^= zhash.piece(Color.fromId(id), ptype, where);
     self.zhistory[self.state.ply] = self.state.hash;
+    assert(self.state.hash == self.calcHashSlow());
 }
 
 pub fn unplace(self: *Board, id: u5) void {
@@ -95,6 +97,7 @@ pub fn unplace(self: *Board, id: u5) void {
     self.pieces[id] = .none;
     self.where[id] = 0xFF;
     self.board[where] = Place.empty;
+    assert(self.state.hash == self.calcHashSlow());
 }
 
 pub fn move(self: *Board, m: Move) State {
@@ -338,7 +341,7 @@ pub fn unmove(self: *Board, m: Move, old_state: State) void {
 
 pub fn moveNull(self: *Board) State {
     const result = self.state;
-    self.state.hash ^= zhash.move ^ @as(u64, self.state.enpassant) ^ 0xFF;
+    self.state.hash ^= zhash.move ^ @as(Hash, self.state.enpassant) ^ 0xFF;
     self.state.enpassant = 0xFF;
     self.state.no_capture_clock += 1;
     self.state.ply += 1;
@@ -405,14 +408,14 @@ fn isVisibleBySlider(self: *Board, comptime dirs: anytype, src: u8, dest: u8) bo
     return true;
 }
 
-pub fn calcHashSlow(self: *const Board) u64 {
-    var result: u64 = 0;
+pub fn calcHashSlow(self: *const Board) Hash {
+    var result: Hash = 0;
     for (0..32) |i| {
         const ptype = self.pieces[i];
         const where = self.where[i];
         if (ptype != .none) result ^= zhash.piece(Color.fromId(@truncate(i)), ptype, where);
     }
-    result ^= self.state.enpassant;
+    result ^= zhash.enpassant(self.state.enpassant);
     result ^= zhash.castle(self.state.castle);
     if (self.active_color == .black) result ^= zhash.move;
     return result;
@@ -540,6 +543,7 @@ const common = @import("common.zig");
 const coord = @import("coord.zig");
 const zhash = @import("zhash.zig");
 const Color = @import("common.zig").Color;
+const Hash = @import("zhash.zig").Hash;
 const Move = @import("Move.zig");
 const MoveCode = @import("MoveCode.zig");
 const MoveList = @import("MoveList.zig");

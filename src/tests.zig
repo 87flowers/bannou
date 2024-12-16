@@ -9,6 +9,7 @@ comptime {
     _ = @import("eval.zig");
     _ = @import("Game.zig");
     _ = @import("generate_psts.zig");
+    _ = @import("generate_zhash.zig");
     _ = @import("line.zig");
     _ = @import("main.zig");
     _ = @import("Move.zig");
@@ -19,6 +20,9 @@ comptime {
     _ = @import("TTEntry.zig");
     _ = @import("zhash.zig");
     // util
+    _ = @import("util/bch.zig");
+    _ = @import("util/bit.zig");
     _ = @import("util/NullWriter.zig");
-    _ = @import("util/Prng.zig");
+    _ = @import("util/polynomial.zig");
+    _ = @import("util/vector.zig");
 }

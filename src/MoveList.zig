@@ -156,8 +156,7 @@ fn add(self: *MoveList, comptime mode: MoveGeneratorMode, state: State, ptype: P
                 zhash.move ^
                 zhash.piece(Color.fromId(id), ptype, src) ^
                 zhash.piece(Color.fromId(id), ptype, dest) ^
-                state.enpassant ^
-                0xFF ^
+                zhash.enpassant(state.enpassant) ^
                 zhash.castle(state.castle) ^
                 zhash.castle((state.castle | coord.toBit(src))),
         },
@@ -191,8 +190,7 @@ fn addPawnOne(self: *MoveList, comptime mode: MoveGeneratorMode, state: State, p
                     .capture => zhash.piece(Color.fromId(id).invert(), capture_place.ptype, dest),
                     .no_capture => 0,
                 } ^
-                state.enpassant ^
-                0xFF,
+                zhash.enpassant(state.enpassant),
         },
         .mtype = .normal,
     };
@@ -219,8 +217,8 @@ fn addPawnTwo(self: *MoveList, comptime mode: MoveGeneratorMode, state: State, p
                 zhash.move ^
                 zhash.piece(Color.fromId(id), ptype, src) ^
                 zhash.piece(Color.fromId(id), ptype, dest) ^
-                state.enpassant ^
-                enpassant,
+                zhash.enpassant(state.enpassant) ^
+                zhash.enpassant(enpassant),
         },
         .mtype = .normal,
     };
@@ -252,8 +250,7 @@ fn addPawnPromotion(self: *MoveList, comptime mode: MoveGeneratorMode, state: St
                     .capture => zhash.piece(Color.fromId(id).invert(), capture_place.ptype, dest),
                     .no_capture => 0,
                 } ^
-                state.enpassant ^
-                0xFF ^
+                zhash.enpassant(state.enpassant) ^
                 zhash.castle(state.castle) ^
                 zhash.castle((state.castle | coord.toBit(dest))),
         },
@@ -284,8 +281,7 @@ fn addCapture(self: *MoveList, comptime mode: MoveGeneratorMode, state: State, p
                 zhash.piece(Color.fromId(id), ptype, src) ^
                 zhash.piece(Color.fromId(id), ptype, dest) ^
                 zhash.piece(Color.fromId(id).invert(), capture_place.ptype, dest) ^
-                state.enpassant ^
-                0xFF ^
+                zhash.enpassant(state.enpassant) ^
                 zhash.castle(state.castle) ^
                 zhash.castle((state.castle | coord.toBit(src) | coord.toBit(dest))),
         },
@@ -317,8 +313,7 @@ fn addEnpassant(self: *MoveList, comptime mode: MoveGeneratorMode, state: State,
                 zhash.piece(Color.fromId(id), ptype, src) ^
                 zhash.piece(Color.fromId(id), ptype, state.enpassant) ^
                 zhash.piece(Color.fromId(id).invert(), capture_place.ptype, capture_coord) ^
-                state.enpassant ^
-                0xFF,
+                zhash.enpassant(state.enpassant),
         },
         .mtype = .normal,
     };
@@ -347,8 +342,7 @@ fn addCastle(self: *MoveList, comptime mode: MoveGeneratorMode, state: State, ro
                 zhash.piece(Color.fromId(rook_id), .k, dest_king) ^
                 zhash.piece(Color.fromId(rook_id), .r, src_rook) ^
                 zhash.piece(Color.fromId(rook_id), .r, dest_rook) ^
-                state.enpassant ^
-                0xFF ^
+                zhash.enpassant(state.enpassant) ^
                 zhash.castle(state.castle) ^
                 zhash.castle((state.castle | coord.toBit(src_rook) | coord.toBit(src_king))),
         },
