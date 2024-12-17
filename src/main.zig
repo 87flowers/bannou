@@ -6,7 +6,7 @@ const TimeControl = struct {
     movestogo: ?u64 = null,
 };
 
-var g = Game{};
+var g: Game = undefined;
 
 const Uci = struct {
     output: std.fs.File.Writer,
@@ -187,6 +187,8 @@ const Uci = struct {
 };
 
 pub fn main() !void {
+    g.reset();
+
     var uci = Uci{ .output = std.io.getStdOut().writer() };
 
     const buffer_size = common.max_game_ply * 5;

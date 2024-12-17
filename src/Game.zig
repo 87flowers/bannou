@@ -1,11 +1,13 @@
 const tt_size = 0x1000000;
 
-board: Board = Board.defaultBoard(),
-tt: [tt_size]TTEntry = [1]TTEntry{TTEntry.empty} ** tt_size,
-killers: [common.max_search_ply]MoveCode = [1]MoveCode{MoveCode.none} ** common.max_search_ply,
+board: Board,
+tt: [tt_size]TTEntry,
+killers: [common.max_search_ply]MoveCode,
 
 pub fn reset(self: *Game) void {
-    self.* = .{};
+    self.board = Board.defaultBoard();
+    @memset(&self.tt, TTEntry.empty);
+    @memset(&self.killers, MoveCode.none);
 }
 
 pub fn ttLoad(self: *Game) TTEntry {
