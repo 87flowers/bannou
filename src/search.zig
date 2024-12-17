@@ -118,10 +118,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: u
         .firstply, .normal, .nullmove => moves.generateMoves(&game.board, .any),
         .quiescence => moves.generateMoves(&game.board, .captures_only),
     }
-    moves.sortWith(.{
-        .tt = tte.best_move,
-        .killer = game.killers[ply],
-    });
+    game.sortMoves(&moves, tte.best_move, ply);
 
     var moves_visited: usize = 0;
     for (0..moves.size) |i| {
@@ -150,9 +147,9 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: u
                 pv.write(best_move, &child_pv);
 
                 if (child_score >= beta) {
-                    // Record killer move
-                    if (!m.isTactical()) {
-                        game.insertKillerMove(ply, best_move);
+                    if (mode != .quiescence) {
+                        // Record history
+                        game.recordHistory(ply, depth, &moves, i);
                     }
                     break;
                 }
