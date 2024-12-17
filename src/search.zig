@@ -94,8 +94,10 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: u
         }
     }
 
+    const is_in_check = game.board.isInCheck();
+
     // Null-move pruning
-    if (!game.board.isInCheck() and (mode == .normal or mode == .nullmove) and depth > 2 and static_eval >= beta) {
+    if (!is_in_check and (mode == .normal or mode == .nullmove) and depth > 2 and static_eval >= beta) {
         const old_state = game.board.moveNull();
         const null_score = -try search2(game, ctrl, line.Null{}, -beta, -beta +| 1, ply + 1, depth - 4, .normal);
         game.board.unmoveNull(old_state);
@@ -159,7 +161,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: u
 
     if (best_score == no_moves) {
         pv.writeEmpty();
-        if (!game.board.isInCheck()) {
+        if (!is_in_check) {
             return 0;
         } else {
             return no_moves + 1;
