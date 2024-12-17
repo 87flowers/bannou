@@ -4,12 +4,13 @@ const max_history_value: i32 = 1 << 24;
 board: Board,
 tt: [tt_size]TTEntry,
 killers: [common.max_search_ply]MoveCode,
-history: [6*64*64]i32,
+history: [6 * 64 * 64]i32,
 
 pub fn reset(self: *Game) void {
     self.board = Board.defaultBoard();
     @memset(&self.tt, TTEntry.empty);
     @memset(&self.killers, MoveCode.none);
+    @memset(&self.history, 0);
 }
 
 pub fn ttLoad(self: *Game) TTEntry {
