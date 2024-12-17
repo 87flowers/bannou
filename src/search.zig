@@ -96,6 +96,11 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: u
 
     const is_in_check = game.board.isInCheck();
 
+    // Reverse futility pruning
+    if (!is_in_check and mode != .quiescence and static_eval -| depth * 100 > beta) {
+        return static_eval;
+    }
+
     // Null-move pruning
     if (!is_in_check and (mode == .normal or mode == .nullmove) and depth > 2 and static_eval >= beta) {
         const old_state = game.board.moveNull();
