@@ -32,8 +32,10 @@ pub fn sortMoves(self: *Game, moves: *MoveList, tt_move: MoveCode, ply: u32) voi
                 break :blk @as(i32, 127 << 24);
             if (m.isCapture())
                 break :blk @as(i32, 125 << 24) + (@as(i32, @intFromEnum(m.capture_place.ptype)) << 8) - @intFromEnum(m.src_ptype);
-            if (m.code.code == killer.code)
+            if (m.isPromotion() and m.dest_ptype == .q)
                 break :blk @as(i32, 124 << 24);
+            if (m.code.code == killer.code)
+                break :blk @as(i32, 123 << 24);
             break :blk self.getHistory(m).*;
         };
     }
@@ -68,7 +70,7 @@ pub fn recordHistory(self: *Game, ply: u32, depth: i32, moves: *const MoveList, 
 
         // History penalty
         for (moves.moves[0..i]) |badm| {
-            if (badm.isCapture()) continue;
+            if (badm.isCapture() or (m.isPromotion() and m.dest_ptype == .q)) continue;
             if (badm.code.code == old_killer.code) continue;
             self.updateHistory(badm, -adjustment);
         }
