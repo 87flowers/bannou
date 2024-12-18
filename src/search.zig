@@ -128,11 +128,21 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: u
     game.sortMoves(&moves, tte.best_move, ply);
 
     var moves_visited: usize = 0;
+    var quiets_visited: usize = 0;
     for (0..moves.size) |i| {
         const m = moves.moves[i];
         const old_state = game.board.move(m);
         defer game.board.unmove(m, old_state);
         if (game.board.isValid()) {
+            // Late Move Pruning
+            if (mode != .quiescence and !m.isTactical() and beta == alpha + 1) {
+                quiets_visited += 1;
+                const lmp_threshold = 3 + (depth << 2);
+                if (!is_in_check and quiets_visited > lmp_threshold) {
+                    break;
+                }
+            }
+
             var child_pv = pv.newChild();
             const child_score = blk: {
                 if (game.board.isRepeatedPosition() or game.board.is50MoveExpired()) break :blk 0;
