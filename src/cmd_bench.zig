@@ -7,7 +7,7 @@ pub fn run(output: anytype, g: *Game) !void {
         try output.print("benching {s}\n", .{fen});
         g.board = try Board.parse(fen);
 
-        var control = search.DepthControl.init(.{ .target_depth = 7 });
+        var control = search.DepthControl.init(.{ .target_depth = 9 });
         var pv = line.Line{};
         _ = try search.go(output, g, &control, &pv);
 
