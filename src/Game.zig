@@ -22,7 +22,7 @@ pub fn ttStore(self: *Game, tte: TTEntry) void {
 }
 
 pub fn sortMoves(self: *Game, moves: *MoveList, tt_move: MoveCode, ply: u32) void {
-    const killer = self.killers[ply];
+    const killer = self.getKiller(ply);
 
     var sort_scores: [common.max_legal_moves]i32 = undefined;
     for (0..moves.size) |i| {
@@ -42,6 +42,14 @@ pub fn sortMoves(self: *Game, moves: *MoveList, tt_move: MoveCode, ply: u32) voi
     moves.sortInOrder(&sort_scores);
 }
 
+fn getKiller(self: *Game, ply: u32) MoveCode {
+    return self.killers[ply];
+}
+
+fn updateKiller(self: *Game, ply: u32, m: Move) void {
+    self.killers[ply] = m.code;
+}
+
 fn getHistory(self: *Game, m: Move) *i32 {
     const ptype: usize = @intFromEnum(m.dest_ptype) - 1;
     const src: usize = coord.compress(m.src_coord);
@@ -58,11 +66,11 @@ fn updateHistory(self: *Game, m: Move, adjustment: i32) void {
 
 pub fn recordHistory(self: *Game, ply: u32, depth: i32, moves: *const MoveList, i: usize) void {
     const m = moves.moves[i];
-    const old_killer = self.killers[ply];
+    const old_killer = self.getKiller(ply);
 
     // Record killer move
     if (!m.isTactical()) {
-        self.killers[ply] = m.code;
+        self.updateKiller(ply, m);
     }
 
     if (!m.isCapture()) {
