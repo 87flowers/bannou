@@ -136,8 +136,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: u
         if (game.board.isValid()) {
             // Late Move Pruning
             if (mode != .quiescence and !m.isTactical() and beta == alpha + 1) {
-                quiets_visited += 1;
-                const lmp_threshold = 3 + (depth << 2);
+                const lmp_threshold = 2 + (depth << 2);
                 if (!is_in_check and quiets_visited > lmp_threshold) {
                     break;
                 }
@@ -148,15 +147,21 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: u
                 if (game.board.isRepeatedPosition() or game.board.is50MoveExpired()) break :blk 0;
 
                 const a = @max(alpha, best_score);
+
+                // PVS Scout Search
                 if (mode != .quiescence and moves_visited != 0 and beta != alpha + 1) {
                     const scout_score = -try search2(game, ctrl, &child_pv, -a - 1, -a, ply + 1, depth - 1, mode);
                     if (scout_score <= a or scout_score >= beta) break :blk scout_score;
                 }
+
                 break :blk -try search2(game, ctrl, &child_pv, -beta, -a, ply + 1, depth - 1, mode);
             };
 
             ctrl.nodeVisited();
             moves_visited += 1;
+            if (mode != .quiescence and !m.isTactical()) {
+                quiets_visited += 1;
+            }
 
             if (child_score > best_score) {
                 best_score = child_score;
