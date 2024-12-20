@@ -518,7 +518,7 @@ pub fn debugPrint(self: *const Board, output: anytype) !void {
         const j = (i + (i & 0o70)) ^ 0x70;
         const p = self.board[j];
         try output.print("{c}", .{p.ptype.toChar(Color.fromId(p.id))});
-        if (i % 8 == 7) std.debug.print("\n", .{});
+        if (i % 8 == 7) try output.print("\n", .{});
     }
     try output.print("{} ", .{self.active_color});
     try self.state.format(output, self);
