@@ -94,7 +94,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: u
 
     const no_moves = -std.math.maxInt(i32);
     var best_score: i32 = no_moves;
-    var best_move: MoveCode = tte.best_move;
+    var best_move: MoveCode = if (tthit) tte.best_move else MoveCode.none;
 
     // Stand-pat (for quiescence search)
     if (mode == .quiescence) {
