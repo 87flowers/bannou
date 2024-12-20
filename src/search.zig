@@ -64,30 +64,41 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: u
 
     try ctrl.checkHardTermination(mode, depth);
 
+    // Are we on a PV node?
+    const is_pv_node = beta != alpha + 1;
+
     const tte = game.ttLoad();
-    if (tte.hash == game.board.state.hash) {
-        if (tte.depth >= depth) {
-            const pass = switch (tte.bound) {
-                .lower => tte.score >= beta,
-                .exact => false,
-                .upper => tte.score <= alpha,
-            };
-            if (pass) {
-                pv.write(tte.best_move, &.{});
-                return tte.score;
-            }
-        }
+    const ttmatch = tte.hash == game.board.state.hash;
+    const tthit = ttmatch and tte.depth >= depth;
+
+    // Transposition Table Pruning
+    if (!is_pv_node and tthit and switch (tte.bound) {
+        .lower => tte.score >= beta,
+        .exact => true,
+        .upper => tte.score <= alpha,
+    }) {
+        pv.write(tte.best_move, &.{});
+        return tte.score;
     }
 
-    const static_eval = eval.eval(game);
+    // Static evaluation with TT replacement
+    const first_static_eval = eval.eval(game);
+    const static_eval = if (tthit and switch (tte.bound) {
+        .lower => tte.score >= first_static_eval,
+        .exact => true,
+        .upper => tte.score <= first_static_eval,
+    })
+        tte.score
+    else
+        first_static_eval;
 
     const no_moves = -std.math.maxInt(i32);
     var best_score: i32 = no_moves;
     var best_move: MoveCode = tte.best_move;
 
+    // Stand-pat (for quiescence search)
     if (mode == .quiescence) {
         best_score = static_eval;
-        // Check stand-pat score for beta cut-off (avoid move generation)
         if (static_eval >= beta) {
             pv.writeEmpty();
             return best_score;
@@ -135,7 +146,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: u
         defer game.board.unmove(m, old_state);
         if (game.board.isValid()) {
             // Late Move Pruning
-            if (mode != .quiescence and !m.isTactical() and beta == alpha + 1) {
+            if (mode != .quiescence and !m.isTactical() and !is_pv_node) {
                 const lmp_threshold = 2 + (depth << 2);
                 if (!is_in_check and quiets_visited > lmp_threshold) {
                     break;
@@ -149,7 +160,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: u
                 const a = @max(alpha, best_score);
 
                 // PVS Scout Search
-                if (mode != .quiescence and moves_visited != 0 and beta != alpha + 1) {
+                if (mode != .quiescence and moves_visited != 0 and is_pv_node) {
                     const scout_score = -try search2(game, ctrl, &child_pv, -a - 1, -a, ply + 1, depth - 1, mode);
                     if (scout_score <= a or scout_score >= beta) break :blk scout_score;
                 }
@@ -189,7 +200,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: u
     }
     if (best_score < -1073741824) best_score = best_score + 1;
 
-    if (tte.hash != game.board.state.hash or tte.depth <= depth) {
+    if (!ttmatch or tte.depth <= depth) {
         game.ttStore(.{
             .hash = game.board.state.hash,
             .best_move = best_move,
