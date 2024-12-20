@@ -12,7 +12,7 @@ pub fn copyFrom(self: *Board, other: *const Board) void {
     self.state = other.state;
     self.active_color = other.active_color;
     const zhistory_len = other.state.ply + 1;
-    @memcpy(self.zhistory[0..zhistory_len], self.zhistory[0..zhistory_len]);
+    @memcpy(self.zhistory[0..zhistory_len], other.zhistory[0..zhistory_len]);
 }
 
 pub fn emptyBoard() Board {
