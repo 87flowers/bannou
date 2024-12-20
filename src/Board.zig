@@ -154,18 +154,12 @@ pub fn makeMoveByPgnCode(self: *Board, pgn_arg: []const u8) bool {
 
     if (std.mem.eql(u8, pgn, "O-O")) {
         if (self.board[self.active_color.backRank() | 4].ptype != .k) return false;
-        switch (self.active_color) {
-            .white => return self.makeMoveByCode(MoveCode.parse("e1g1") catch unreachable),
-            .black => return self.makeMoveByCode(MoveCode.parse("e8g8") catch unreachable),
-        }
+        return self.makeMoveByCode(MoveCode.castle_kingside(self.active_color));
     }
 
     if (std.mem.eql(u8, pgn, "O-O-O")) {
         if (self.board[self.active_color.backRank() | 4].ptype != .k) return false;
-        switch (self.active_color) {
-            .white => return self.makeMoveByCode(MoveCode.parse("e1c1") catch unreachable),
-            .black => return self.makeMoveByCode(MoveCode.parse("e8c8") catch unreachable),
-        }
+        return self.makeMoveByCode(MoveCode.castle_queenside(self.active_color));
     }
 
     var promotion_ptype: PieceType = .none;

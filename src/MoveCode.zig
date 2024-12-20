@@ -2,6 +2,22 @@ code: u16,
 
 pub const none = MoveCode{ .code = 0 };
 
+pub fn castle_kingside(color: Color) MoveCode {
+    const table = [2]MoveCode{
+        MoveCode.parse("e1g1") catch unreachable,
+        MoveCode.parse("e8g8") catch unreachable,
+    };
+    return table[@intFromEnum(color)];
+}
+
+pub fn castle_queenside(color: Color) MoveCode {
+    const table = [2]MoveCode{
+        MoveCode.parse("e1c1") catch unreachable,
+        MoveCode.parse("e8c8") catch unreachable,
+    };
+    return table[@intFromEnum(color)];
+}
+
 pub fn make(src_ptype: PieceType, src_coord: u8, dest_ptype: PieceType, dest_coord: u8) MoveCode {
     return .{
         .code = @as(u16, coord.compress(src_coord)) << 9 |
@@ -57,6 +73,7 @@ pub fn parse(str: []const u8) ParseError!MoveCode {
 
 const std = @import("std");
 const coord = @import("coord.zig");
+const Color = @import("common.zig").Color;
 const MoveCode = @import("MoveCode.zig");
 const ParseError = @import("common.zig").ParseError;
 const PieceType = @import("common.zig").PieceType;
