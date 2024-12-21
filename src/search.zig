@@ -121,7 +121,8 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: u
             if (mode == .nullmove) {
                 // Failed high twice, prune
                 pv.writeEmpty();
-                return null_score;
+                // Do not return mate scores
+                return if (isMateScore(null_score)) beta else null_score;
             }
             // Subtree verification search
             // This is the same as a normal search except:
@@ -198,7 +199,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: u
             return no_moves + 1;
         }
     }
-    if (best_score < -1073741824) best_score = best_score + 1;
+    if (best_score < 0 and isMateScore(best_score)) best_score = best_score + 1;
 
     if (!ttmatch or tte.depth <= depth) {
         game.ttStore(.{
@@ -259,6 +260,10 @@ pub fn go(output: anytype, game: *Game, ctrl: anytype, pv: anytype) !i32 {
         if (ctrl.checkSoftTermination(depth)) break;
     }
     return score;
+}
+
+fn isMateScore(score: i32) bool {
+    return @abs(score) > 1073741824;
 }
 
 const SearchError = error{EarlyTermination};
