@@ -343,7 +343,7 @@ pub fn moveNull(self: *Board) State {
     const result = self.state;
     self.state.hash ^= zhash.move ^ zhash.enpassant(self.state.enpassant);
     self.state.enpassant = 0xFF;
-    self.state.no_capture_clock += 1;
+    self.state.no_capture_clock = 0;
     self.state.ply += 1;
     self.active_color = self.active_color.invert();
     self.zhistory[self.state.ply] = self.state.hash;
