@@ -19,7 +19,7 @@ pub fn genBasisMatrix(comptime n: u4, m: usize) Matrix(n) {
     use_gs.appendAssumeCapacity(0);
     use_gs.appendAssumeCapacity(1);
     for (generators.slice()) |g| {
-        use_gs.appendAssumeCapacity(@truncate(g));
+        use_gs.appendAssumeCapacity(@intCast(g));
         if (bitWidth(g) >= m) break;
     }
     std.mem.reverse(Row(n), use_gs.slice());
@@ -28,7 +28,7 @@ pub fn genBasisMatrix(comptime n: u4, m: usize) Matrix(n) {
     var g_index: usize = 0;
     for (0..rowBits(n)) |i| {
         while (i > @ctz(@bitReverse(use_gs.get(g_index)))) g_index += 1;
-        result[i] = @bitReverse(use_gs.get(g_index)) >> @truncate(i);
+        result[i] = @bitReverse(use_gs.get(g_index)) >> @intCast(i);
     }
     return result;
 }

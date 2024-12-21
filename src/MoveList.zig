@@ -9,7 +9,7 @@ pub const MoveGeneratorMode = enum {
 pub fn generateMoves(self: *MoveList, board: *Board, comptime mode: MoveGeneratorMode) void {
     const id_base = board.active_color.idBase();
     for (0..16) |id_index| {
-        const id: u5 = @truncate(id_base + id_index);
+        const id: u5 = @intCast(id_base + id_index);
         self.generateMovesForPiece(board, mode, id);
     }
 }

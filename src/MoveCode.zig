@@ -45,10 +45,10 @@ pub fn dest(self: MoveCode) u8 {
 pub fn format(self: MoveCode, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
     const ptype: PieceType = @enumFromInt(self.code & 7);
     try writer.print("{c}{c}{c}{c}", .{
-        'a' + @as(u8, @truncate(self.code >> 9 & 7)),
-        '1' + @as(u8, @truncate(self.code >> 12 & 7)),
-        'a' + @as(u8, @truncate(self.code >> 3 & 7)),
-        '1' + @as(u8, @truncate(self.code >> 6 & 7)),
+        'a' + @as(u8, @intCast(self.code >> 9 & 7)),
+        '1' + @as(u8, @intCast(self.code >> 12 & 7)),
+        'a' + @as(u8, @intCast(self.code >> 3 & 7)),
+        '1' + @as(u8, @intCast(self.code >> 6 & 7)),
     });
     if (ptype != .none) try writer.print("{c}", .{ptype.toChar(.black)});
 }

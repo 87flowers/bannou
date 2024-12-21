@@ -18,7 +18,7 @@ pub fn rankFromChar(ch: u8) ParseError!u8 {
 
 test toString {
     for (0..256) |i| {
-        const coord: u8 = @truncate(i);
+        const coord: u8 = @intCast(i);
         if (isValid(coord)) {
             try std.testing.expectEqual(coord, try fromString(toString(coord)));
         }
@@ -27,7 +27,7 @@ test toString {
 
 pub fn compress(coord: u8) u6 {
     assert(isValid(coord));
-    return @truncate((coord + (coord & 7)) >> 1);
+    return @intCast((coord + (coord & 7)) >> 1);
 }
 
 pub fn uncompress(comp: u6) u8 {
@@ -36,7 +36,7 @@ pub fn uncompress(comp: u6) u8 {
 
 test compress {
     for (0..256) |i| {
-        const coord: u8 = @truncate(i);
+        const coord: u8 = @intCast(i);
         if (isValid(coord)) {
             try std.testing.expectEqual(coord, uncompress(compress(coord)));
         }

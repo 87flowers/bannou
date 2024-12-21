@@ -221,7 +221,7 @@ pub fn makeMoveByPgnCode(self: *Board, pgn_arg: []const u8) bool {
     var candidate: ?Move = null;
     const id_base = self.active_color.idBase();
     for (0..16) |id_index| {
-        const id: u5 = @truncate(id_base + id_index);
+        const id: u5 = @intCast(id_base + id_index);
         if (self.pieces[id] != src_ptype) continue;
         if (self.where[id] & src_mask != src) continue;
 
@@ -373,7 +373,7 @@ pub fn isAttacked(self: *Board, target: u8, friendly: Color) bool {
     const enemy_color = friendly.invert();
     const id_base = enemy_color.idBase();
     for (0..16) |id_index| {
-        const id: u5 = @truncate(id_base + id_index);
+        const id: u5 = @intCast(id_base + id_index);
         const enemy = self.where[id];
         switch (self.pieces[id]) {
             .none => {},
@@ -413,7 +413,7 @@ pub fn calcHashSlow(self: *const Board) Hash {
     for (0..32) |i| {
         const ptype = self.pieces[i];
         const where = self.where[i];
-        if (ptype != .none) result ^= zhash.piece(Color.fromId(@truncate(i)), ptype, where);
+        if (ptype != .none) result ^= zhash.piece(Color.fromId(@intCast(i)), ptype, where);
     }
     result ^= zhash.enpassant(self.state.enpassant);
     result ^= zhash.castle(self.state.castle);
@@ -495,11 +495,11 @@ pub fn parseParts(board_str: []const u8, color_str: []const u8, castle_str: []co
             const ptype, const color = try PieceType.parse(ch);
             if (ptype == .k) {
                 if (result.pieces[color.idBase()] != .none) return ParseError.DuplicateKing;
-                result.place(color.idBase(), .k, coord.uncompress(@truncate(place_index)) ^ 0x70);
+                result.place(color.idBase(), .k, coord.uncompress(@intCast(place_index)) ^ 0x70);
             } else {
                 if (id[@intFromEnum(color)] > 0xf) return ParseError.TooManyPieces;
-                const current_id: u5 = @truncate(color.idBase() + id[@intFromEnum(color)]);
-                result.place(current_id, ptype, coord.uncompress(@truncate(place_index)) ^ 0x70);
+                const current_id: u5 = @intCast(color.idBase() + id[@intFromEnum(color)]);
+                result.place(current_id, ptype, coord.uncompress(@intCast(place_index)) ^ 0x70);
                 id[@intFromEnum(color)] += 1;
             }
             place_index += 1;
