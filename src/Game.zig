@@ -62,6 +62,11 @@ pub fn unmoveNull(self: *Game, old_state: State) void {
     self.board.unmoveNull(old_state);
 }
 
+pub fn prevMove(self: *Game) MoveCode {
+    if (self.move_history_len == 0) return MoveCode.none;
+    return self.move_history[self.move_history_len - 1];
+}
+
 pub fn undoAndReplay(self: *Game, plys: usize) bool {
     if (plys > self.move_history_len)
         return false;

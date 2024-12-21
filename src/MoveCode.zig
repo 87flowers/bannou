@@ -42,6 +42,10 @@ pub fn dest(self: MoveCode) u8 {
     return coord.uncompress(@truncate(self.code >> 3));
 }
 
+pub fn isNone(self: MoveCode) bool {
+    return self.code == none.code;
+}
+
 pub fn format(self: MoveCode, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
     const ptype: PieceType = @enumFromInt(self.code & 7);
     try writer.print("{c}{c}{c}{c}", .{
