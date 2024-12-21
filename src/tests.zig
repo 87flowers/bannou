@@ -24,5 +24,4 @@ comptime {
     _ = @import("util/bit.zig");
     _ = @import("util/NullWriter.zig");
     _ = @import("util/polynomial.zig");
-    _ = @import("util/vector.zig");
 }

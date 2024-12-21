@@ -15,20 +15,20 @@ pub fn genBasisMatrix(comptime n: u4, m: usize) Matrix(n) {
     const min_polys = polynomial.generateMinPolys(n);
     const generators = polynomial.generateGenerators(n, min_polys);
 
-    var use_gs = Vector(Row(n), 1 << n + 2){};
-    use_gs.append(0);
-    use_gs.append(1);
+    var use_gs = std.BoundedArray(Row(n), 1 << n + 2){};
+    use_gs.appendAssumeCapacity(0);
+    use_gs.appendAssumeCapacity(1);
     for (generators.slice()) |g| {
-        use_gs.append(@truncate(g));
+        use_gs.appendAssumeCapacity(@truncate(g));
         if (bitWidth(g) >= m) break;
     }
-    std.mem.reverse(Row(n), use_gs.mutSlice());
+    std.mem.reverse(Row(n), use_gs.slice());
 
     var result: Matrix(n) = undefined;
     var g_index: usize = 0;
     for (0..rowBits(n)) |i| {
-        while (i > @ctz(@bitReverse(use_gs.items[g_index]))) g_index += 1;
-        result[i] = @bitReverse(use_gs.items[g_index]) >> @truncate(i);
+        while (i > @ctz(@bitReverse(use_gs.get(g_index)))) g_index += 1;
+        result[i] = @bitReverse(use_gs.get(g_index)) >> @truncate(i);
     }
     return result;
 }
@@ -48,4 +48,3 @@ pub fn Matrix(comptime n: u4) type {
 const std = @import("std");
 const bitWidth = @import("bit.zig").bitWidth;
 const polynomial = @import("polynomial.zig");
-const Vector = @import("vector.zig").Vector;

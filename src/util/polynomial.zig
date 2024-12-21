@@ -90,7 +90,7 @@ pub fn MinPoly(comptime n: u4) type {
 }
 
 pub fn MinPolys(comptime n: u4) type {
-    return Vector(MinPoly(n), 1 << n);
+    return std.BoundedArray(MinPoly(n), 1 << n);
 }
 
 pub fn generateMinPolys(comptime n: u4) MinPolys(n) {
@@ -98,7 +98,9 @@ pub fn generateMinPolys(comptime n: u4) MinPolys(n) {
     var result = MinPolys(n){};
     for (1..1 << n - 1) |i| {
         const poly = a.pow(i).findMinPoly();
-        if (!result.contains(poly)) result.append(poly);
+        if (!std.mem.containsAtLeast(@TypeOf(poly), result.slice(), 1, &.{poly})) {
+            result.appendAssumeCapacity(poly);
+        }
     }
     return result;
 }
@@ -108,16 +110,16 @@ pub fn Generator(comptime n: u4) type {
 }
 
 pub fn Generators(comptime n: u4) type {
-    return Vector(Generator(n), 1 << n);
+    return std.BoundedArray(Generator(n), 1 << n);
 }
 
 pub fn generateGenerators(comptime n: u4, min_polys: MinPolys(n)) Generators(n) {
     assert(min_polys.len > 0);
     var result = Generators(n){};
-    result.append(min_polys.items[0]);
+    result.appendAssumeCapacity(min_polys.get(0));
     for (1..min_polys.len) |i| {
-        const prev = result.items[i - 1];
-        result.append(clmul(Generator(n), prev, min_polys.items[i]));
+        const prev = result.get(i - 1);
+        result.appendAssumeCapacity(clmul(Generator(n), prev, min_polys.get(i)));
     }
     return result;
 }
@@ -125,4 +127,3 @@ pub fn generateGenerators(comptime n: u4, min_polys: MinPolys(n)) Generators(n) 
 const std = @import("std");
 const assert = std.debug.assert;
 const clmul = @import("bit.zig").clmul;
-const Vector = @import("vector.zig").Vector;
