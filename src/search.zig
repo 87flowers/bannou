@@ -114,9 +114,9 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: u
 
     // Null-move pruning
     if (!is_in_check and (mode == .normal or mode == .nullmove) and depth > 2 and static_eval >= beta) {
-        const old_state = game.board.moveNull();
+        const old_state = game.moveNull();
         const null_score = -try search2(game, ctrl, line.Null{}, -beta, -beta +| 1, ply + 1, depth - 4, .normal);
-        game.board.unmoveNull(old_state);
+        game.unmoveNull(old_state);
         if (null_score >= beta) {
             if (mode == .nullmove) {
                 // Failed high twice, prune
@@ -142,8 +142,8 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: u
     var quiets_visited: usize = 0;
     for (0..moves.size) |i| {
         const m = moves.moves[i];
-        const old_state = game.board.move(m);
-        defer game.board.unmove(m, old_state);
+        const old_state = game.move(m);
+        defer game.unmove(m, old_state);
         if (game.board.isValid()) {
             // Late Move Pruning
             if (mode != .quiescence and !m.isTactical() and !is_pv_node) {

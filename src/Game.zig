@@ -6,11 +6,71 @@ tt: [tt_size]TTEntry,
 killers: [common.max_search_ply]MoveCode,
 history: [6 * 64 * 64]i32,
 
+base_position: Board = Board.defaultBoard(),
+move_history: [common.max_game_ply]MoveCode,
+move_history_len: usize,
+
 pub fn reset(self: *Game) void {
-    self.board = Board.defaultBoard();
     @memset(&self.tt, TTEntry.empty);
     @memset(&self.killers, MoveCode.none);
     @memset(&self.history, 0);
+    @memset(&self.move_history, MoveCode.none);
+    self.setPositionDefault();
+}
+
+pub fn setPositionDefault(self: *Game) void {
+    self.board = Board.defaultBoard();
+    self.base_position = Board.defaultBoard();
+    self.move_history_len = 0;
+}
+
+pub fn setPosition(self: *Game, pos: Board) void {
+    self.board.copyFrom(&pos);
+    self.base_position.copyFrom(&pos);
+    self.move_history_len = 0;
+}
+
+pub fn move(self: *Game, m: Move) State {
+    self.move_history[self.move_history_len] = m.code;
+    self.move_history_len += 1;
+    return self.board.move(m);
+}
+
+pub fn makeMoveByCode(self: *Game, code: MoveCode) bool {
+    if (!self.board.makeMoveByCode(code))
+        return false;
+    self.move_history[self.move_history_len] = code;
+    self.move_history_len += 1;
+    return true;
+}
+
+pub fn unmove(self: *Game, m: Move, old_state: State) void {
+    assert(self.move_history[self.move_history_len - 1].code == m.code.code);
+    self.move_history_len -= 1;
+    self.board.unmove(m, old_state);
+}
+
+pub fn moveNull(self: *Game) State {
+    self.move_history[self.move_history_len] = MoveCode.none;
+    self.move_history_len += 1;
+    return self.board.moveNull();
+}
+
+pub fn unmoveNull(self: *Game, old_state: State) void {
+    assert(self.move_history[self.move_history_len - 1].code == MoveCode.none.code);
+    self.move_history_len -= 1;
+    self.board.unmoveNull(old_state);
+}
+
+pub fn undoAndReplay(self: *Game, plys: usize) bool {
+    if (plys > self.move_history_len)
+        return false;
+    self.move_history_len -= plys;
+    self.board.copyFrom(&self.base_position);
+    for (self.move_history[0..self.move_history_len]) |code| {
+        _ = self.board.makeMoveByCode(code);
+    }
+    return true;
 }
 
 pub fn ttLoad(self: *Game) TTEntry {
@@ -98,4 +158,5 @@ const Move = @import("Move.zig");
 const MoveCode = @import("MoveCode.zig");
 const MoveList = @import("MoveList.zig");
 const PieceType = @import("common.zig").PieceType;
+const State = @import("State.zig");
 const TTEntry = @import("TTEntry.zig");
