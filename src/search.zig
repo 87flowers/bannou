@@ -137,7 +137,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: u
         .firstply, .normal, .nullmove => moves.generateMoves(&game.board, .any),
         .quiescence => moves.generateMoves(&game.board, .captures_only),
     }
-    game.sortMoves(&moves, tte.best_move, ply);
+    game.sortMoves(&moves, tte.best_move);
 
     var best_i: usize = undefined;
     var moves_visited: usize = 0;
@@ -189,7 +189,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: u
 
     // Record history
     if (best_score >= beta and mode != .quiescence) {
-        game.recordHistory(ply, depth, &moves, best_i);
+        game.recordHistory(depth, &moves, best_i);
     }
 
     if (best_score == no_moves) {

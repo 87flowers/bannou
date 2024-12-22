@@ -3,7 +3,7 @@ const max_history_value: i32 = 1 << 24;
 
 board: Board,
 tt: [tt_size]TTEntry,
-killers: [common.max_search_ply]MoveCode,
+killers: [common.max_game_ply]MoveCode,
 history: [6 * 64 * 64]i32,
 
 base_position: Board = Board.defaultBoard(),
@@ -86,8 +86,8 @@ pub fn ttStore(self: *Game, tte: TTEntry) void {
     self.tt[self.board.state.hash % tt_size] = tte;
 }
 
-pub fn sortMoves(self: *Game, moves: *MoveList, tt_move: MoveCode, ply: u32) void {
-    const killer = self.getKiller(ply);
+pub fn sortMoves(self: *Game, moves: *MoveList, tt_move: MoveCode) void {
+    const killer = self.getKiller();
 
     var sort_scores: [common.max_legal_moves]i32 = undefined;
     for (0..moves.size) |i| {
@@ -107,12 +107,12 @@ pub fn sortMoves(self: *Game, moves: *MoveList, tt_move: MoveCode, ply: u32) voi
     moves.sortInOrder(&sort_scores);
 }
 
-fn getKiller(self: *Game, ply: u32) MoveCode {
-    return self.killers[ply];
+fn getKiller(self: *Game) MoveCode {
+    return self.killers[self.move_history_len];
 }
 
-fn updateKiller(self: *Game, ply: u32, m: Move) void {
-    self.killers[ply] = m.code;
+fn updateKiller(self: *Game, m: Move) void {
+    self.killers[self.move_history_len] = m.code;
 }
 
 fn getHistory(self: *Game, m: Move) *i32 {
@@ -129,13 +129,13 @@ fn updateHistory(self: *Game, m: Move, adjustment: i32) void {
     h.* += adjustment - grav;
 }
 
-pub fn recordHistory(self: *Game, ply: u32, depth: i32, moves: *const MoveList, i: usize) void {
+pub fn recordHistory(self: *Game, depth: i32, moves: *const MoveList, i: usize) void {
     const m = moves.moves[i];
-    const old_killer = self.getKiller(ply);
+    const old_killer = self.getKiller();
 
     // Record killer move
     if (!m.isTactical()) {
-        self.updateKiller(ply, m);
+        self.updateKiller(m);
     }
 
     if (!m.isCapture()) {
