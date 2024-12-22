@@ -17,7 +17,7 @@ comptime {
     _ = @import("MoveList.zig");
     _ = @import("search.zig");
     _ = @import("State.zig");
-    _ = @import("TTEntry.zig");
+    _ = @import("TT.zig");
     _ = @import("zhash.zig");
     // util
     _ = @import("util/bch.zig");

@@ -337,6 +337,7 @@ pub fn unmove(self: *Board, m: Move, old_state: State) void {
     }
     self.state = old_state;
     self.active_color = self.active_color.invert();
+    assert(self.zhistory[self.state.ply] == self.state.hash);
 }
 
 pub fn moveNull(self: *Board) State {
@@ -354,6 +355,7 @@ pub fn moveNull(self: *Board) State {
 pub fn unmoveNull(self: *Board, old_state: State) void {
     self.state = old_state;
     self.active_color = self.active_color.invert();
+    assert(self.zhistory[self.state.ply] == self.state.hash);
 }
 
 /// This MUST be checked after making a move on the board.
@@ -512,6 +514,7 @@ pub fn parseParts(board_str: []const u8, color_str: []const u8, castle_str: []co
 
     result.state = try State.parseParts(result.active_color, castle_str, enpassant_str, no_capture_clock_str, ply_str);
     result.state.hash = result.calcHashSlow();
+    result.zhistory[result.state.ply] = result.state.hash;
 
     return result;
 }

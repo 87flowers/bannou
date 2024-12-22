@@ -121,7 +121,7 @@ const k_eg = [_]i16 {
 };
 // zig fmt: on
 
-pub fn eval(game: *const Game) i32 {
+pub fn eval(game: *const Game) i14 {
     const mg_phase = phase(&game.board);
     const eg_phase = 24 - mg_phase;
     var score: i32 = 0;
@@ -150,10 +150,10 @@ pub fn eval(game: *const Game) i32 {
         };
     }
     score = @divTrunc(score, 24);
-    return switch (game.board.active_color) {
+    return clampScore(switch (game.board.active_color) {
         .white => score,
         .black => -score,
-    };
+    });
 }
 
 pub fn phase(board: *const Board) i32 {
@@ -170,6 +170,19 @@ pub fn phase(board: *const Board) i32 {
     return @min(result, 24);
 }
 
+pub fn clampScore(raw: anytype) Score {
+    return @intCast(std.math.clamp(raw, -8000, 8000));
+}
+pub fn isMateScore(score: Score) bool {
+    return @abs(score) > 8000;
+}
+
+pub const Score = i14;
+pub const no_moves: Score = -std.math.maxInt(Score);
+pub const draw: Score = 0;
+pub const mated: Score = no_moves + 1;
+
+const std = @import("std");
 const Board = @import("Board.zig");
 const Game = @import("Game.zig");
 const coord = @import("coord.zig");

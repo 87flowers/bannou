@@ -48,7 +48,7 @@ pub fn Control(comptime limit: struct {
 pub const TimeControl = Control(.{ .time = true });
 pub const DepthControl = Control(.{ .depth = true });
 
-fn search2(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: u32, depth: i32, comptime mode: SearchMode) SearchError!i32 {
+fn search2(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, ply: u32, depth: i32, comptime mode: SearchMode) SearchError!Score {
     return if (mode != .quiescence and depth <= 0)
         try search(game, ctrl, pv, alpha, beta, ply, depth, .quiescence)
     else if (mode == .firstply)
@@ -57,7 +57,7 @@ fn search2(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: 
         try search(game, ctrl, pv, alpha, beta, ply, depth, mode);
 }
 
-fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: u32, depth: i32, comptime mode: SearchMode) SearchError!i32 {
+fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, ply: u32, depth: i32, comptime mode: SearchMode) SearchError!Score {
     // Preconditions for optimizer to be aware of.
     if (mode != .quiescence) assert(depth > 0);
     if (mode == .quiescence) assert(depth <= 0);
@@ -68,22 +68,23 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: u
     const is_pv_node = beta != alpha + 1;
 
     const tte = game.ttLoad();
-    const ttmatch = tte.hash == game.board.state.hash;
-    const tthit = ttmatch and tte.depth >= depth;
+    const tthit = !tte.isEmpty() and tte.depth >= depth;
 
     // Transposition Table Pruning
     if (!is_pv_node and tthit and switch (tte.bound) {
+        .empty => false,
         .lower => tte.score >= beta,
         .exact => true,
         .upper => tte.score <= alpha,
     }) {
-        pv.write(tte.best_move, &.{});
+        pv.write(tte.move(), &.{});
         return tte.score;
     }
 
     // Static evaluation with TT replacement
     const first_static_eval = eval.eval(game);
-    const static_eval = if (tthit and switch (tte.bound) {
+    const static_eval = if (switch (tte.bound) {
+        .empty => false,
         .lower => tte.score >= first_static_eval,
         .exact => true,
         .upper => tte.score <= first_static_eval,
@@ -92,16 +93,15 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: u
     else
         first_static_eval;
 
-    const no_moves = -std.math.maxInt(i32);
-    var best_score: i32 = no_moves;
-    var best_move: MoveCode = if (tthit) tte.best_move else MoveCode.none;
+    var best_score: Score = eval.no_moves;
+    var best_move: MoveCode = if (tthit) tte.move() else MoveCode.none;
 
     // Stand-pat (for quiescence search)
     if (mode == .quiescence) {
         best_score = static_eval;
         if (static_eval >= beta) {
             pv.writeEmpty();
-            return best_score;
+            return static_eval;
         }
     }
 
@@ -122,7 +122,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: u
                 // Failed high twice, prune
                 pv.writeEmpty();
                 // Do not return mate scores
-                return if (isMateScore(null_score)) beta else null_score;
+                return if (eval.isMateScore(null_score)) beta else null_score;
             }
             // Subtree verification search
             // This is the same as a normal search except:
@@ -137,7 +137,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: u
         .firstply, .normal, .nullmove => moves.generateMoves(&game.board, .any),
         .quiescence => moves.generateMoves(&game.board, .captures_only),
     }
-    game.sortMoves(&moves, tte.best_move);
+    game.sortMoves(&moves, tte.move());
 
     var best_i: usize = undefined;
     var moves_visited: usize = 0;
@@ -192,42 +192,39 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: u
         game.recordHistory(depth, &moves, best_i);
     }
 
-    if (best_score == no_moves) {
+    if (best_score == eval.no_moves) {
         pv.writeEmpty();
         if (!is_in_check) {
-            return 0;
+            return eval.draw;
         } else {
-            return no_moves + 1;
+            return eval.mated;
         }
     }
-    if (best_score < 0 and isMateScore(best_score)) best_score = best_score + 1;
+    if (best_score < 0 and eval.isMateScore(best_score)) best_score = best_score + 1;
 
-    if (!ttmatch or tte.depth <= depth) {
-        game.ttStore(.{
-            .hash = game.board.state.hash,
-            .best_move = best_move,
-            .depth = @intCast(@max(0, depth)),
-            .score = best_score,
-            .bound = if (best_score >= beta)
-                .lower
-            else if (best_score <= alpha)
-                .upper
-            else
-                .exact,
-        });
-    }
+    game.ttStore(.{
+        .best_move = best_move,
+        .depth = @intCast(@max(0, depth)),
+        .score = best_score,
+        .bound = if (best_score >= beta)
+            .lower
+        else if (best_score <= alpha)
+            .upper
+        else
+            .exact,
+    });
 
     return best_score;
 }
 
-fn forDepth(game: *Game, ctrl: anytype, pv: anytype, depth: i32, prev_score: i32) SearchError!i32 {
-    const min_window = -std.math.maxInt(i32);
-    const max_window = std.math.maxInt(i32);
+fn forDepth(game: *Game, ctrl: anytype, pv: anytype, depth: i32, prev_score: Score) SearchError!Score {
+    const min_window = -std.math.maxInt(Score);
+    const max_window = std.math.maxInt(Score);
 
     if (depth > 3) {
         // Aspiration windows
         var score = prev_score;
-        var delta: i32 = 25;
+        var delta: Score = 25;
         var lower = @max(min_window, prev_score -| delta);
         var upper = @min(max_window, prev_score +| delta);
         while (true) : (delta *= 2) {
@@ -246,10 +243,10 @@ fn forDepth(game: *Game, ctrl: anytype, pv: anytype, depth: i32, prev_score: i32
     return try search(game, ctrl, pv, min_window, max_window, 0, depth, .firstply);
 }
 
-pub fn go(output: anytype, game: *Game, ctrl: anytype, pv: anytype) !i32 {
+pub fn go(output: anytype, game: *Game, ctrl: anytype, pv: anytype) !Score {
     comptime assert(@typeInfo(@TypeOf(ctrl)) == .pointer and @typeInfo(@TypeOf(pv)) == .pointer);
     var depth: i32 = 1;
-    var score: i32 = undefined;
+    var score: Score = undefined;
     var current_pv = pv.new();
     while (depth < common.max_search_ply) : (depth += 1) {
         score = forDepth(game, ctrl, &current_pv, depth, score) catch {
@@ -263,10 +260,6 @@ pub fn go(output: anytype, game: *Game, ctrl: anytype, pv: anytype) !i32 {
     return score;
 }
 
-fn isMateScore(score: i32) bool {
-    return @abs(score) > 1073741824;
-}
-
 const SearchError = error{EarlyTermination};
 const SearchMode = enum { firstply, normal, nullmove, quiescence };
 
@@ -278,3 +271,5 @@ const line = @import("line.zig");
 const Game = @import("Game.zig");
 const MoveCode = @import("MoveCode.zig");
 const MoveList = @import("MoveList.zig");
+const Score = @import("eval.zig").Score;
+const TT = @import("TT.zig");

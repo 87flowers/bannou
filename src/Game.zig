@@ -1,8 +1,7 @@
-const tt_size = 0x1000000;
 const max_history_value: i32 = 1 << 24;
 
 board: Board,
-tt: [tt_size]TTEntry,
+tt: TT,
 killers: [common.max_game_ply]MoveCode,
 history: [6 * 64 * 64]i32,
 counter_moves: [2 * 64 * 64]MoveCode,
@@ -12,11 +11,11 @@ move_history: [common.max_game_ply]MoveCode,
 move_history_len: usize,
 
 pub fn reset(self: *Game) void {
-    @memset(&self.tt, TTEntry.empty);
     @memset(&self.killers, MoveCode.none);
     @memset(&self.history, 0);
     @memset(&self.counter_moves, MoveCode.none);
     @memset(&self.move_history, MoveCode.none);
+    self.tt.clear();
     self.setPositionDefault();
 }
 
@@ -80,12 +79,17 @@ pub fn undoAndReplay(self: *Game, plys: usize) bool {
     return true;
 }
 
-pub fn ttLoad(self: *Game) TTEntry {
-    return self.tt[self.board.state.hash % tt_size];
+pub fn ttLoad(self: *Game) TT.Entry {
+    return self.tt.load(self.board.state.hash);
 }
 
-pub fn ttStore(self: *Game, tte: TTEntry) void {
-    self.tt[self.board.state.hash % tt_size] = tte;
+pub fn ttStore(self: *Game, arg: struct {
+    depth: i8,
+    best_move: MoveCode,
+    bound: TT.Bound,
+    score: Score,
+}) void {
+    self.tt.store(self.board.state.hash, arg.depth, arg.best_move, arg.bound, arg.score);
 }
 
 pub fn sortMoves(self: *Game, moves: *MoveList, tt_move: MoveCode) void {
@@ -183,5 +187,6 @@ const Move = @import("Move.zig");
 const MoveCode = @import("MoveCode.zig");
 const MoveList = @import("MoveList.zig");
 const PieceType = @import("common.zig").PieceType;
+const Score = @import("eval.zig").Score;
 const State = @import("State.zig");
-const TTEntry = @import("TTEntry.zig");
+const TT = @import("TT.zig");
