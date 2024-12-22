@@ -139,6 +139,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: u
     }
     game.sortMoves(&moves, tte.best_move, ply);
 
+    var best_i: usize = undefined;
     var moves_visited: usize = 0;
     var quiets_visited: usize = 0;
     for (0..moves.size) |i| {
@@ -178,17 +179,17 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: i32, beta: i32, ply: u
             if (child_score > best_score) {
                 best_score = child_score;
                 best_move = m.code;
+                best_i = i;
                 pv.write(best_move, &child_pv);
 
-                if (child_score >= beta) {
-                    if (mode != .quiescence) {
-                        // Record history
-                        game.recordHistory(ply, depth, &moves, i);
-                    }
-                    break;
-                }
+                if (child_score >= beta) break;
             }
         }
+    }
+
+    // Record history
+    if (best_score >= beta and mode != .quiescence) {
+        game.recordHistory(ply, depth, &moves, best_i);
     }
 
     if (best_score == no_moves) {
