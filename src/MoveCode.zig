@@ -2,6 +2,14 @@ code: u16,
 
 pub const none = MoveCode{ .code = 0 };
 
+pub fn make(src_ptype: PieceType, src_coord: u8, dest_ptype: PieceType, dest_coord: u8) MoveCode {
+    return .{
+        .code = @as(u16, coord.compress(src_coord)) << 9 |
+            @as(u16, coord.compress(dest_coord)) << 3 |
+            if (src_ptype != dest_ptype) @as(u16, @intFromEnum(dest_ptype)) else 0,
+    };
+}
+
 pub fn castle_kingside(color: Color) MoveCode {
     const table = [2]MoveCode{
         MoveCode.parse("e1g1") catch unreachable,
@@ -18,14 +26,6 @@ pub fn castle_queenside(color: Color) MoveCode {
     return table[@intFromEnum(color)];
 }
 
-pub fn make(src_ptype: PieceType, src_coord: u8, dest_ptype: PieceType, dest_coord: u8) MoveCode {
-    return .{
-        .code = @as(u16, coord.compress(src_coord)) << 9 |
-            @as(u16, coord.compress(dest_coord)) << 3 |
-            if (src_ptype != dest_ptype) @as(u16, @intFromEnum(dest_ptype)) else 0,
-    };
-}
-
 pub fn promotion(self: MoveCode) PieceType {
     return @enumFromInt(self.code & 7);
 }
@@ -40,6 +40,10 @@ pub fn src(self: MoveCode) u8 {
 
 pub fn dest(self: MoveCode) u8 {
     return coord.uncompress(@truncate(self.code >> 3));
+}
+
+pub fn compressedPair(self: MoveCode) u12 {
+    return @truncate(self.code >> 3);
 }
 
 pub fn isNone(self: MoveCode) bool {

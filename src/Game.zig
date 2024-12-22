@@ -5,6 +5,7 @@ board: Board,
 tt: [tt_size]TTEntry,
 killers: [common.max_game_ply]MoveCode,
 history: [6 * 64 * 64]i32,
+counter_moves: [2 * 64 * 64]MoveCode,
 
 base_position: Board = Board.defaultBoard(),
 move_history: [common.max_game_ply]MoveCode,
@@ -14,6 +15,7 @@ pub fn reset(self: *Game) void {
     @memset(&self.tt, TTEntry.empty);
     @memset(&self.killers, MoveCode.none);
     @memset(&self.history, 0);
+    @memset(&self.counter_moves, MoveCode.none);
     @memset(&self.move_history, MoveCode.none);
     self.setPositionDefault();
 }
@@ -88,6 +90,7 @@ pub fn ttStore(self: *Game, tte: TTEntry) void {
 
 pub fn sortMoves(self: *Game, moves: *MoveList, tt_move: MoveCode) void {
     const killer = self.getKiller();
+    const counter_move = self.getCounter();
 
     var sort_scores: [common.max_legal_moves]i32 = undefined;
     for (0..moves.size) |i| {
@@ -100,7 +103,9 @@ pub fn sortMoves(self: *Game, moves: *MoveList, tt_move: MoveCode) void {
             if (m.isPromotion() and m.dest_ptype == .q)
                 break :blk @as(i32, 124 << 24);
             if (m.code.code == killer.code)
-                break :blk @as(i32, 123 << 24);
+                break :blk @as(i32, 123 << 24) + 1;
+            if (m.code.code == counter_move.code)
+                break :blk @as(i32, 123 << 24) + 0;
             break :blk self.getHistory(m).*;
         };
     }
@@ -113,6 +118,18 @@ fn getKiller(self: *Game) MoveCode {
 
 fn updateKiller(self: *Game, m: Move) void {
     self.killers[self.move_history_len] = m.code;
+}
+
+fn getCounter(self: *Game) MoveCode {
+    const index = @as(usize, self.prevMove().compressedPair()) +
+        @as(usize, @intFromEnum(self.board.active_color)) * 64 * 64;
+    return self.counter_moves[index];
+}
+
+fn updateCounter(self: *Game, m: Move) void {
+    const index = @as(usize, self.prevMove().compressedPair()) +
+        @as(usize, @intFromEnum(self.board.active_color)) * 64 * 64;
+    self.counter_moves[index] = m.code;
 }
 
 fn getHistory(self: *Game, m: Move) *i32 {
@@ -132,10 +149,12 @@ fn updateHistory(self: *Game, m: Move, adjustment: i32) void {
 pub fn recordHistory(self: *Game, depth: i32, moves: *const MoveList, i: usize) void {
     const m = moves.moves[i];
     const old_killer = self.getKiller();
+    const old_counter = self.getCounter();
 
     // Record killer move
     if (!m.isTactical()) {
         self.updateKiller(m);
+        self.updateCounter(m);
     }
 
     if (!m.isCapture()) {
@@ -145,6 +164,7 @@ pub fn recordHistory(self: *Game, depth: i32, moves: *const MoveList, i: usize) 
         for (moves.moves[0..i]) |badm| {
             if (badm.isCapture() or (m.isPromotion() and m.dest_ptype == .q)) continue;
             if (badm.code.code == old_killer.code) continue;
+            if (badm.code.code == old_counter.code) continue;
             self.updateHistory(badm, -adjustment);
         }
 
