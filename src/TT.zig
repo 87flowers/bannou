@@ -16,7 +16,7 @@ pub fn load(self: *TT, hash: Hash) Entry {
     return entry;
 }
 
-pub fn store(self: *TT, hash: Hash, depth: i8, best_move: MoveCode, bound: Bound, score: Score) void {
+pub fn store(self: *TT, hash: Hash, depth: u7, best_move: MoveCode, bound: Bound, score: Score) void {
     const h = decomposeHash(hash);
     const bucket: *Bucket = &self.buckets[h.bucket_index];
     const new_entry = Entry{
@@ -71,9 +71,9 @@ test Bucket {
 }
 
 pub const Entry = packed struct(u64) {
-    pub const Fragment = u25;
+    pub const Fragment = u26;
 
-    depth: i8,
+    depth: u7,
     raw_move_code: u15,
     bound: Bound,
     score: Score,

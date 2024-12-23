@@ -84,7 +84,7 @@ pub fn ttLoad(self: *Game) TT.Entry {
 }
 
 pub fn ttStore(self: *Game, arg: struct {
-    depth: i8,
+    depth: u7,
     best_move: MoveCode,
     bound: TT.Bound,
     score: Score,

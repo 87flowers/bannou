@@ -204,7 +204,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
 
     game.ttStore(.{
         .best_move = best_move,
-        .depth = @intCast(@max(0, depth)),
+        .depth = @intCast(std.math.clamp(depth, 0, 127)),
         .score = best_score,
         .bound = if (best_score >= beta)
             .lower
