@@ -94,7 +94,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
         first_static_eval;
 
     var best_score: Score = eval.no_moves;
-    var best_move: MoveCode = if (tthit) tte.move() else MoveCode.none;
+    var best_move: MoveCode = tte.move();
 
     // Stand-pat (for quiescence search)
     if (mode == .quiescence) {
@@ -137,7 +137,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
         .firstply, .normal, .nullmove => moves.generateMoves(&game.board, .any),
         .quiescence => moves.generateMoves(&game.board, .captures_only),
     }
-    game.sortMoves(&moves, tte.move());
+    game.sortMoves(&moves, best_move);
 
     var best_i: usize = undefined;
     var moves_visited: usize = 0;
