@@ -166,7 +166,11 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
                     const log2 = std.math.log2;
                     const l2m = log2(moves_visited);
                     const l2d = log2(@as(u32, @intCast(depth)));
-                    const reduction: i32 = @intCast((3 + l2m * l2d) / 4);
+                    var reduction: i32 = @intCast((3 + l2m * l2d) / 4);
+                    if (!m.isTactical()) {
+                        // reduce quiets more on non-PV nodes
+                        reduction += @intFromBool(!is_pv_node);
+                    }
                     const r = std.math.clamp(reduction, 1, depth - 1);
                     if (r > 1) {
                         const lmr_score = -try search2(game, ctrl, &child_pv, -a - 1, -a, ply + 1, depth - r, mode);
