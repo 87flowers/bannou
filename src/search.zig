@@ -161,6 +161,19 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
 
                 const a = @max(alpha, best_score);
 
+                // Late move reductions
+                if (mode != .quiescence and moves_visited > 2 and depth > 2) {
+                    const log2 = std.math.log2;
+                    const l2m = log2(moves_visited);
+                    const l2d = log2(@as(u32, @intCast(depth)));
+                    const reduction: i32 = @intCast((3 + l2m * l2d) / 4);
+                    const r = std.math.clamp(reduction, 1, depth - 1);
+                    if (r > 1) {
+                        const lmr_score = -try search2(game, ctrl, &child_pv, -a - 1, -a, ply + 1, depth - r, mode);
+                        if (lmr_score <= a) break :blk lmr_score;
+                    }
+                }
+
                 // PVS Scout Search
                 if (mode != .quiescence and moves_visited != 0 and is_pv_node) {
                     const scout_score = -try search2(game, ctrl, &child_pv, -a - 1, -a, ply + 1, depth - 1, mode);

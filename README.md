@@ -50,6 +50,7 @@ auto [<depth>]               Equivalent to `go depth <depth>` followed by making
   * Transposition table cutoffs
   * Null move reduction (followed by pruning on second NMR)
   * Reverse futility pruning
+  * Late move reductions
   * Late move pruning
 * Move ordering
   * MVV-LVA
