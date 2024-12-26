@@ -162,7 +162,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
                 const a = @max(alpha, best_score);
 
                 // Late move reductions
-                if (mode != .quiescence and moves_visited > 2 and depth > 2) {
+                if (mode != .quiescence and quiets_visited > 2 and depth > 2) {
                     const log2 = std.math.log2;
                     const l2m = log2(moves_visited);
                     const l2d = log2(@as(u32, @intCast(depth)));
