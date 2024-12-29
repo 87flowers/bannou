@@ -133,10 +133,30 @@ const Uci = struct {
             g.reset();
         } else if (std.mem.eql(u8, command, "uci")) {
             try self.output.print("{s}\n", .{
-                \\id name Bannou 0.48
+                \\id name Bannou 0.49
                 \\id author 87 (87flowers.com)
+                \\option name Hash type spin default 4 min 1 max 65535
+                \\option name Threads type spin default 1 min 1 max 1
                 \\uciok
             });
+        } else if (std.mem.eql(u8, command, "setoption")) {
+            const name_str = it.next() orelse return;
+            if (!std.mem.eql(u8, name_str, "name"))
+                return self.output.print("info string Error: Unexpected token '{s}' in setoption command\n", .{name_str});
+            const name = it.next() orelse return;
+            if (std.mem.eql(u8, name, "Threads")) {
+                // do nothing
+            } else if (std.mem.eql(u8, name, "Hash")) {
+                const value_str = it.next() orelse return;
+                if (!std.mem.eql(u8, value_str, "value"))
+                    return self.output.print("info string Error: Unexpected token '{s}' in setoption command\n", .{value_str});
+                const value: ?usize = std.fmt.parseUnsigned(u16, it.next() orelse "0", 10) catch null;
+                if (value.? == 0 or value == null)
+                    return self.output.print("info string Error: Invalid value for option Hash\n", .{});
+                try g.tt.setHashSizeMb(value.?);
+            } else {
+                return self.output.print("info string Error: Unrecognised setting name '{s}' in setoption command\n", .{name});
+            }
         } else if (std.mem.eql(u8, command, "debug")) {
             _ = it.next();
             // TODO: set debug mode based on next argument

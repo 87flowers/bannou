@@ -20,6 +20,14 @@ pub fn deinit(self: *TT) !void {
     self.allocator.free(self.buckets);
 }
 
+pub fn setHashSizeMb(self: *TT, mb: usize) !void {
+    const n = bucketsFromMb(mb);
+    if (n != self.buckets.len) {
+        self.allocator.free(self.buckets);
+        self.buckets = try self.allocator.alloc(Bucket, n);
+    }
+}
+
 pub fn clear(self: *TT) void {
     @memset(self.buckets, std.mem.zeroes(Bucket));
 }
