@@ -57,12 +57,11 @@ pub fn store(self: *TT, hash: Hash, depth: u7, best_move: MoveCode, bound: Bound
 }
 
 inline fn decomposeHash(self: *TT, hash: Hash) struct { bucket_index: usize, meta: u8, fragment: Entry.Fragment } {
-    const shift = std.math.log2(self.buckets.len);
-    const rest = hash >> @intCast(shift);
+    const h: u128 = std.math.mulWide(u64, hash, self.buckets.len);
     return .{
-        .bucket_index = hash & (self.buckets.len - 1),
-        .meta = @truncate(rest),
-        .fragment = @truncate(rest >> 8),
+        .bucket_index = @intCast(h >> 64),
+        .meta = @truncate(h >> (64 - 8)),
+        .fragment = @truncate(h >> (64 - 8 - @bitSizeOf(Entry.Fragment))),
     };
 }
 

@@ -1,3 +1,7 @@
+pub fn toZhash(row: bch.Row(9)) u64 {
+    return @bitReverse(@as(u64, @truncate(row)));
+}
+
 pub fn main() !void {
     var output = std.io.getStdOut().writer();
 
@@ -20,8 +24,8 @@ pub fn main() !void {
             }
 
             const pm_index = ptype * 64 + where;
-            const hb: Hash = @truncate(pm[6 * 64 + where]);
-            const hp: Hash = @truncate(pm[pm_index]);
+            const hb: Hash = toZhash(pm[6 * 64 + where]);
+            const hp: Hash = toZhash(pm[pm_index]);
 
             const h = hp ^ (if (color == 1) hb else 0);
 
@@ -39,7 +43,7 @@ pub fn main() !void {
     try output.print("const enpassant_table = [16]Hash{{\n", .{});
     try output.print("    ", .{});
     for (0..8) |i| {
-        const h: Hash = @truncate(pm[7 * 64 + i]);
+        const h: Hash = toZhash(pm[7 * 64 + i]);
         try output.print("0x{X:016}, ", .{h});
     }
     try output.print("0, 0, 0, 0, 0, 0, 0, 0,\n", .{});
@@ -49,14 +53,14 @@ pub fn main() !void {
 
     try output.print("const base_castle_table = [4]Hash{{\n", .{});
     for (0..4) |i| {
-        const h: Hash = @truncate(pm[7 * 64 + 8 + i]);
+        const h: Hash = toZhash(pm[7 * 64 + 8 + i]);
         try output.print("    0x{X:016},\n", .{h});
     }
     try output.print("}};\n", .{});
 
     try output.print("\n", .{});
 
-    const bh: Hash = @truncate(pm[7 * 64 + 8 + 4 + 0]);
+    const bh: Hash = toZhash(pm[7 * 64 + 8 + 4 + 0]);
     try output.print("pub const move: Hash = 0x{X:016};\n", .{bh});
 }
 
