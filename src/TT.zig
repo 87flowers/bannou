@@ -1,4 +1,4 @@
-pub const default_tt_size_mb = 4;
+pub const default_tt_size_mb = 16;
 
 buckets: []Bucket,
 allocator: std.mem.Allocator,
@@ -9,7 +9,6 @@ fn bucketsFromMb(mb: usize) usize {
 
 pub fn init(allocator: std.mem.Allocator) !TT {
     const n = comptime bucketsFromMb(default_tt_size_mb);
-    comptime assert(n == 1 << 15);
     return .{
         .allocator = allocator,
         .buckets = try allocator.alloc(Bucket, n),
