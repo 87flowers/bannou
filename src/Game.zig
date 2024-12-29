@@ -10,6 +10,17 @@ base_position: Board = Board.defaultBoard(),
 move_history: [common.max_game_ply]MoveCode,
 move_history_len: usize,
 
+pub fn init(allocator: std.mem.Allocator) !Game {
+    var self: Game = undefined;
+    self.tt = try TT.init(allocator);
+    self.reset();
+    return self;
+}
+
+pub fn deinit(self: *Game) void {
+    self.tt.deinit();
+}
+
 pub fn reset(self: *Game) void {
     @memset(&self.killers, MoveCode.none);
     @memset(&self.history, 0);

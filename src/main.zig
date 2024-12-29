@@ -169,7 +169,10 @@ const Uci = struct {
 };
 
 pub fn main() !void {
-    g.reset();
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+
+    g = try Game.init(gpa.allocator());
 
     var uci = Uci{ .output = std.io.getStdOut().writer() };
 

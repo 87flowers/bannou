@@ -1,14 +1,31 @@
-const bucket_shift = 15;
-const num_buckets = 1 << bucket_shift;
+pub const default_tt_size_mb = 4;
 
-buckets: [num_buckets]Bucket,
+buckets: []Bucket,
+allocator: std.mem.Allocator,
+
+fn bucketsFromMb(mb: usize) usize {
+    return mb * 1024 * 1024 / @sizeOf(Bucket);
+}
+
+pub fn init(allocator: std.mem.Allocator) !TT {
+    const n = comptime bucketsFromMb(default_tt_size_mb);
+    comptime assert(n == 1 << 15);
+    return .{
+        .allocator = allocator,
+        .buckets = try allocator.alloc(Bucket, n),
+    };
+}
+
+pub fn deinit(self: *TT) !void {
+    self.allocator.free(self.buckets);
+}
 
 pub fn clear(self: *TT) void {
-    @memset(&self.buckets, std.mem.zeroes(Bucket));
+    @memset(self.buckets, std.mem.zeroes(Bucket));
 }
 
 pub fn load(self: *TT, hash: Hash) Entry {
-    const h = decomposeHash(hash);
+    const h = self.decomposeHash(hash);
     const bucket: *Bucket = &self.buckets[h.bucket_index];
     const index = bucket.getIndex(h.meta) orelse return Entry.empty;
     const entry: Entry = bucket.entries[index];
@@ -17,7 +34,7 @@ pub fn load(self: *TT, hash: Hash) Entry {
 }
 
 pub fn store(self: *TT, hash: Hash, depth: u7, best_move: MoveCode, bound: Bound, score: Score) void {
-    const h = decomposeHash(hash);
+    const h = self.decomposeHash(hash);
     const bucket: *Bucket = &self.buckets[h.bucket_index];
     const new_entry = Entry{
         .fragment = h.fragment,
@@ -39,11 +56,13 @@ pub fn store(self: *TT, hash: Hash, depth: u7, best_move: MoveCode, bound: Bound
     }
 }
 
-fn decomposeHash(hash: Hash) struct { bucket_index: usize, meta: u8, fragment: Entry.Fragment } {
+inline fn decomposeHash(self: *TT, hash: Hash) struct { bucket_index: usize, meta: u8, fragment: Entry.Fragment } {
+    const shift = std.math.log2(self.buckets.len);
+    const rest = hash >> @intCast(shift);
     return .{
-        .bucket_index = hash % num_buckets,
-        .meta = @truncate(hash >> bucket_shift),
-        .fragment = @truncate(hash >> (bucket_shift + 8))
+        .bucket_index = hash & (self.buckets.len - 1),
+        .meta = @truncate(rest),
+        .fragment = @truncate(rest >> 8),
     };
 }
 
