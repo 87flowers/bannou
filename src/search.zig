@@ -108,7 +108,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
     const is_in_check = game.board.isInCheck();
 
     // Reverse futility pruning
-    if (!is_in_check and mode != .quiescence and static_eval -| depth * 100 > beta) {
+    if (!is_pv_node and !is_in_check and mode != .quiescence and static_eval -| depth * 100 > beta) {
         return static_eval;
     }
 
