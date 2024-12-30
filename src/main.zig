@@ -192,11 +192,28 @@ const Uci = struct {
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
 
-    g = try Game.init(gpa.allocator());
+    g = try Game.init(allocator);
 
     var uci = Uci{ .output = std.io.getStdOut().writer() };
 
+    // Handle command line arguments
+    {
+        var args = try std.process.argsWithAllocator(allocator);
+        defer args.deinit();
+        // skip program name
+        _ = args.skip();
+
+        var has_arguments = false;
+        while (args.next()) |arg| {
+            has_arguments = true;
+            try uci.uciParseCommand(arg);
+        }
+        if (has_arguments) return;
+    }
+
+    // Handle stdin
     const buffer_size = common.max_game_ply * 5;
     var input = std.io.getStdIn().reader();
     var buffer: [buffer_size]u8 = undefined;
