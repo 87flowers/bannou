@@ -138,7 +138,7 @@ const DataSet = struct {
 };
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}).init;
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
 
     var dataset = DataSet.init(gpa.allocator());

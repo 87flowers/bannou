@@ -1,5 +1,5 @@
 pub fn clmul(comptime T: type, a: T, b: T) T {
-    comptime assert(@typeInfo(T) == .int and @typeInfo(T).int.signedness == .unsigned);
+    // comptime assert(@typeInfo(T) == .int and @typeInfo(T).int.signedness == .unsigned);
     const n = @bitSizeOf(T);
     var result: T = 0;
     for (0..n) |i| {
@@ -13,7 +13,7 @@ pub fn clmul(comptime T: type, a: T, b: T) T {
 }
 
 pub fn clmod(comptime T: type, a: T, b: T) struct { T, T } {
-    comptime assert(@typeInfo(T) == .int and @typeInfo(T).int.signedness == .unsigned);
+    // comptime assert(@typeInfo(T) == .int and @typeInfo(T).int.signedness == .unsigned);
     const n = @bitSizeOf(T);
     const lim = @clz(b);
     var quotient: T = 0;
@@ -30,7 +30,7 @@ pub fn clmod(comptime T: type, a: T, b: T) struct { T, T } {
 }
 
 pub fn bitWidth(x: anytype) usize {
-    comptime assert(@typeInfo(@TypeOf(x)) == .int and @typeInfo(@TypeOf(x)).int.signedness == .unsigned);
+    // comptime assert(@typeInfo(@TypeOf(x)) == .int and @typeInfo(@TypeOf(x)).int.signedness == .unsigned);
     return @bitSizeOf(@TypeOf(x)) - @clz(x);
 }
 

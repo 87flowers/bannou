@@ -10,7 +10,7 @@ state: State,
 mtype: MoveType,
 
 pub fn isCapture(self: *const Move) bool {
-    return self.capture_place != Place.empty;
+    return !self.capture_place.isEmpty();
 }
 
 pub fn isPromotion(self: *const Move) bool {

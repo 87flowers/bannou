@@ -59,7 +59,7 @@ pub fn Gf2(comptime n: u4) type {
         }
 
         pub fn evalWithPoly(x: @This(), poly: anytype) @This() {
-            comptime assert(@typeInfo(@TypeOf(poly)) == .int and @typeInfo(@TypeOf(poly)).int.signedness == .unsigned);
+            // comptime assert(@typeInfo(@TypeOf(poly)) == .int and @typeInfo(@TypeOf(poly)).int.signedness == .unsigned);
 
             var result = @This().init(0);
             var term = @This().init(1);

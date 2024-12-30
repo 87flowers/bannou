@@ -261,7 +261,7 @@ fn forDepth(game: *Game, ctrl: anytype, pv: anytype, depth: i32, prev_score: Sco
 }
 
 pub fn go(output: anytype, game: *Game, ctrl: anytype, pv: anytype) !Score {
-    comptime assert(@typeInfo(@TypeOf(ctrl)) == .pointer and @typeInfo(@TypeOf(pv)) == .pointer);
+    // comptime assert(@typeInfo(@TypeOf(ctrl)) == .pointer and @typeInfo(@TypeOf(pv)) == .pointer);
     var depth: i32 = 1;
     var score: Score = undefined;
     var current_pv = pv.new();

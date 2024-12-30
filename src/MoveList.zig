@@ -28,14 +28,14 @@ pub fn generateMovesForPiece(self: *MoveList, board: *Board, comptime mode: Move
                     [2]u64{ castle_mask.bk, castle_mask.bq },
                 };
                 const castle_k, const castle_q = castle_masks[@intFromEnum(board.active_color)];
-                if (castle_k & board.state.castle == 0 and board.board[rank | 5] == Place.empty and board.board[rank | 6] == Place.empty) {
+                if (castle_k & board.state.castle == 0 and board.board[rank | 5].isEmpty() and board.board[rank | 6].isEmpty()) {
                     if (!board.isAttacked(rank | 4, board.active_color) and !board.isAttacked(rank | 5, board.active_color) and !board.isAttacked(rank | 6, board.active_color)) {
                         if (board.board[rank | 7].ptype == .r and Color.fromId(board.board[rank | 7].id) == board.active_color) {
                             self.addCastle(mode, board.state, board.board[rank | 7].id, rank | 7, rank | 5, rank | 4, rank | 6);
                         }
                     }
                 }
-                if (castle_q & board.state.castle == 0 and board.board[rank | 1] == Place.empty and board.board[rank | 2] == Place.empty and board.board[rank | 3] == Place.empty) {
+                if (castle_q & board.state.castle == 0 and board.board[rank | 1].isEmpty() and board.board[rank | 2].isEmpty() and board.board[rank | 3].isEmpty()) {
                     if (!board.isAttacked(rank | 2, board.active_color) and !board.isAttacked(rank | 3, board.active_color) and !board.isAttacked(rank | 4, board.active_color)) {
                         if (board.board[rank | 0].ptype == .r and Color.fromId(board.board[rank | 0].id) == board.active_color) {
                             self.addCastle(mode, board.state, board.board[rank | 0].id, rank | 0, rank | 3, rank | 4, rank | 2);
@@ -94,7 +94,7 @@ pub fn sortInOrder(self: *MoveList, order: []i32) void {
 }
 
 fn generateSliderMoves(self: *MoveList, board: *Board, comptime mode: MoveGeneratorMode, ptype: PieceType, id: u5, src: u8, dirs: anytype) void {
-    assert(board.where[id] == src and board.board[src] == Place{ .ptype = ptype, .id = id });
+    assert(board.where[id] == src and board.board[src].eql(.{ .ptype = ptype, .id = id }));
     for (dirs) |dir| {
         var dest: u8 = src +% dir;
         while (coord.isValid(dest)) : (dest +%= dir) {
@@ -110,7 +110,7 @@ fn generateSliderMoves(self: *MoveList, board: *Board, comptime mode: MoveGenera
 }
 
 fn generateStepperMoves(self: *MoveList, board: *Board, comptime mode: MoveGeneratorMode, ptype: PieceType, id: u5, src: u8, dirs: anytype) void {
-    assert(board.where[id] == src and board.board[src] == Place{ .ptype = ptype, .id = id });
+    assert(board.where[id] == src and board.board[src].eql(.{ .ptype = ptype, .id = id }));
     for (dirs) |dir| {
         const dest = src +% dir;
         if (coord.isValid(dest)) {
@@ -124,7 +124,7 @@ fn generateStepperMoves(self: *MoveList, board: *Board, comptime mode: MoveGener
 }
 
 fn generatePawnMovesMayPromote(self: *MoveList, board: *Board, comptime mode: MoveGeneratorMode, isrc: u8, id: u5, src: u8, dest: u8, comptime has_capture: MoveList.HasCapture) void {
-    assert(board.where[id] == src and board.board[src] == Place{ .ptype = .p, .id = id });
+    assert(board.where[id] == src and board.board[src].eql(.{ .ptype = .p, .id = id }));
     if ((isrc & 0xF0) == 0x60) {
         // promotion
         self.addPawnPromotion(mode, board.state, .p, id, src, dest, board.board[dest], .q, has_capture);
@@ -166,7 +166,7 @@ fn add(self: *MoveList, comptime mode: MoveGeneratorMode, state: State, ptype: P
 }
 
 fn addPawnOne(self: *MoveList, comptime mode: MoveGeneratorMode, state: State, ptype: PieceType, id: u5, src: u8, dest: u8, capture_place: Place, comptime has_capture: HasCapture) void {
-    assert((has_capture == .capture) != (capture_place == Place.empty));
+    assert((has_capture == .capture) != (capture_place.isEmpty()));
     if (mode == .captures_only and has_capture != .capture) return;
     self.moves[self.size] = .{
         .code = MoveCode.make(ptype, src, ptype, dest),
@@ -226,7 +226,7 @@ fn addPawnTwo(self: *MoveList, comptime mode: MoveGeneratorMode, state: State, p
 }
 
 fn addPawnPromotion(self: *MoveList, comptime mode: MoveGeneratorMode, state: State, src_ptype: PieceType, id: u5, src: u8, dest: u8, capture_place: Place, dest_ptype: PieceType, comptime has_capture: HasCapture) void {
-    assert((has_capture == .capture) != (capture_place == Place.empty));
+    assert((has_capture == .capture) != (capture_place.isEmpty()));
     if (mode == .captures_only and has_capture != .capture) return;
     self.moves[self.size] = .{
         .code = MoveCode.make(src_ptype, src, dest_ptype, dest),

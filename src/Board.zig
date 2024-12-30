@@ -79,7 +79,7 @@ pub fn defaultBoard() Board {
 }
 
 pub fn place(self: *Board, id: u5, ptype: PieceType, where: u8) void {
-    assert(self.board[where] == Place.empty and self.pieces[id] == .none);
+    assert(self.board[where].isEmpty() and self.pieces[id] == .none);
     self.pieces[id] = ptype;
     self.where[id] = where;
     self.board[where] = Place{ .ptype = ptype, .id = id };
@@ -89,7 +89,7 @@ pub fn place(self: *Board, id: u5, ptype: PieceType, where: u8) void {
 }
 
 pub fn unplace(self: *Board, id: u5) void {
-    assert(self.pieces[id] != .none and self.board[self.where[id]] != Place.empty);
+    assert(self.pieces[id] != .none and !self.board[self.where[id]].isEmpty());
     const ptype = self.pieces[id];
     const where = self.where[id];
     self.state.hash ^= zhash.piece(Color.fromId(id), ptype, where);
@@ -106,11 +106,11 @@ pub fn move(self: *Board, m: Move) State {
         .normal => {
             if (m.isCapture()) {
                 assert(self.pieces[m.capture_place.id] == m.capture_place.ptype);
-                assert(self.board[m.capture_coord] == m.capture_place);
+                assert(self.board[m.capture_coord].eql(m.capture_place));
                 self.pieces[m.capture_place.id] = .none;
                 self.board[m.capture_coord] = Place.empty;
             }
-            assert(self.board[m.src_coord] == Place{ .ptype = m.src_ptype, .id = m.id });
+            assert(self.board[m.src_coord].eql(.{ .ptype = m.src_ptype, .id = m.id }));
             self.board[m.src_coord] = Place.empty;
             self.board[m.dest_coord] = Place{ .ptype = m.dest_ptype, .id = m.id };
             self.where[m.id] = m.dest_coord;
@@ -134,7 +134,7 @@ pub fn move(self: *Board, m: Move) State {
 
 pub fn makeMoveByCode(self: *Board, code: MoveCode) bool {
     const p = self.board[code.src()];
-    if (p == Place.empty) return false;
+    if (p.isEmpty()) return false;
 
     var moves = MoveList{};
     moves.generateMovesForPiece(self, .any, p.id);
@@ -405,7 +405,7 @@ fn isVisibleBySlider(self: *Board, comptime dirs: anytype, src: u8, dest: u8) bo
     if (dir == 0) return false;
     var t = src +% dir;
     while (t != dest) : (t +%= dir)
-        if (self.board[t] != Place.empty)
+        if (!self.board[t].isEmpty())
             return false;
     return true;
 }
@@ -447,7 +447,7 @@ pub fn format(self: *const Board, comptime _: []const u8, _: std.fmt.FormatOptio
     for (0..64) |i| {
         const j = (i + (i & 0o70)) ^ 0x70;
         const p = self.board[j];
-        if (p == Place.empty) {
+        if (p.isEmpty()) {
             blanks += 1;
         } else {
             if (blanks != 0) {
@@ -536,6 +536,12 @@ pub const Place = packed struct(u8) {
     ptype: PieceType,
 
     pub const empty = Place{ .ptype = .none, .id = 0 };
+    pub fn isEmpty(self: Place) bool {
+        return self.eql(empty);
+    }
+    pub fn eql(self: Place, other: Place) bool {
+        return std.meta.eql(self, other);
+    }
 };
 
 const Board = @This();
