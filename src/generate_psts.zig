@@ -140,11 +140,12 @@ const DataSet = struct {
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
 
-    var dataset = DataSet.init(gpa.allocator());
+    var dataset = DataSet.init(allocator);
     defer dataset.deinit();
 
-    var args = std.process.args();
+    var args = try std.process.argsWithAllocator(allocator);
     _ = args.skip();
 
     while (args.next()) |fname| {
