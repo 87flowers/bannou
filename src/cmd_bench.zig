@@ -20,7 +20,7 @@ pub fn run(output: anytype, g: *Game) !void {
         \\bench results:
         \\nodes: {} nodes
         \\time:  {} milliseconds
-        \\nps:   {} nodes per second
+        \\nps:   {} nps
         \\
     , .{
         nodes,
