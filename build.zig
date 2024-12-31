@@ -2,7 +2,7 @@ const std = @import("std");
 const OptimizeMode = std.builtin.OptimizeMode;
 const ResolvedTarget = std.Build.ResolvedTarget;
 
-fn add(b: *std.Build, target: ResolvedTarget, optimize: OptimizeMode, step_cmd: []const u8, description: []const u8, exe_name: []const u8, root_source_file: []const u8) void {
+fn add(b: *std.Build, target: ResolvedTarget, optimize: OptimizeMode, step_cmd: []const u8, description: []const u8, exe_name: []const u8, root_source_file: []const u8) *std.Build.Step.Compile {
     const exe = b.addExecutable(.{
         .name = exe_name,
         .root_source_file = b.path(root_source_file),
@@ -17,6 +17,8 @@ fn add(b: *std.Build, target: ResolvedTarget, optimize: OptimizeMode, step_cmd: 
     }
     const run_step = b.step(step_cmd, description);
     run_step.dependOn(&run_cmd.step);
+
+    return exe;
 }
 
 fn addTests(b: *std.Build) void {
@@ -32,9 +34,14 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    add(b, target, optimize, "run", "Run chess engine", "bannou", "src/main.zig");
-    add(b, target, optimize, "generate-psts", "Generate piece square tables", "generate_psts", "src/generate_psts.zig");
-    add(b, target, optimize, "generate-zhash", "Generate Zobrist hash tables", "generate_zhash", "src/generate_zhash.zig");
+    const bannou_exe = add(b, target, optimize, "run", "Run chess engine", "bannou", "src/main.zig");
+    _ = add(b, target, optimize, "generate-psts", "Generate piece square tables", "generate_psts", "src/generate_psts.zig");
+    _ = add(b, target, optimize, "generate-zhash", "Generate Zobrist hash tables", "generate_zhash", "src/generate_zhash.zig");
 
     addTests(b);
+
+    const bench_cmd = b.addRunArtifact(bannou_exe);
+    bench_cmd.addArg("bench");
+    const bench_cmd_step = b.step("bench", "Run chess engine internal benchmark");
+    bench_cmd_step.dependOn(&bench_cmd.step);
 }
