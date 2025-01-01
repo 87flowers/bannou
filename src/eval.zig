@@ -176,6 +176,10 @@ pub fn clampScore(raw: anytype) Score {
 pub fn isMateScore(score: Score) bool {
     return @abs(score) > 8000;
 }
+pub fn getPlysToMate(score: Score) u32 {
+    assert(isMateScore(score));
+    return @abs(mated) - @abs(score);
+}
 
 pub const Score = i14;
 pub const no_moves: Score = -std.math.maxInt(Score);
@@ -183,6 +187,7 @@ pub const draw: Score = 0;
 pub const mated: Score = no_moves + 1;
 
 const std = @import("std");
+const assert = std.debug.assert;
 const Board = @import("Board.zig");
 const Game = @import("Game.zig");
 const coord = @import("coord.zig");
