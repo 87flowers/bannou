@@ -104,30 +104,30 @@ pub fn move(self: *Board, m: Move) State {
     const result = self.state;
     switch (m.mtype) {
         .normal => {
-            assert(self.board[m.src_coord].eql(.{ .ptype = m.src_ptype, .id = m.id }));
+            assert(self.board[m.src_coord].eql(m.src_place));
             self.board[m.src_coord] = Place.empty;
-            self.board[m.dest_coord] = Place{ .ptype = m.dest_ptype, .id = m.id };
-            self.where[m.id] = m.dest_coord;
-            self.pieces[m.id] = m.dest_ptype;
+            self.board[m.dest_coord] = m.dest_place;
+            self.where[m.id()] = m.dest_coord;
+            self.pieces[m.id()] = m.destPtype();
         },
         .capture => {
             assert(self.pieces[m.capture_place.id] == m.capture_place.ptype);
             assert(self.board[m.capture_coord].eql(m.capture_place));
             self.pieces[m.capture_place.id] = .none;
             self.board[m.capture_coord] = Place.empty;
-            assert(self.board[m.src_coord].eql(.{ .ptype = m.src_ptype, .id = m.id }));
+            assert(self.board[m.src_coord].eql(m.src_place));
             self.board[m.src_coord] = Place.empty;
-            self.board[m.dest_coord] = Place{ .ptype = m.dest_ptype, .id = m.id };
-            self.where[m.id] = m.dest_coord;
-            self.pieces[m.id] = m.dest_ptype;
+            self.board[m.dest_coord] = m.dest_place;
+            self.where[m.id()] = m.dest_coord;
+            self.pieces[m.id()] = m.destPtype();
         },
         .castle => {
             self.board[m.code.src()] = Place.empty;
             self.board[m.src_coord] = Place.empty;
-            self.board[m.code.dest()] = Place{ .ptype = .k, .id = m.id & 0x10 };
-            self.board[m.dest_coord] = Place{ .ptype = .r, .id = m.id };
-            self.where[m.id & 0x10] = m.code.dest();
-            self.where[m.id] = m.dest_coord;
+            self.board[m.code.dest()] = Place{ .ptype = .k, .id = m.id() & 0x10 };
+            self.board[m.dest_coord] = Place{ .ptype = .r, .id = m.id() };
+            self.where[m.id() & 0x10] = m.code.dest();
+            self.where[m.id()] = m.dest_coord;
         },
     }
     self.state = m.getNewState(self.state);
@@ -323,25 +323,25 @@ pub fn unmove(self: *Board, m: Move, old_state: State) void {
     switch (m.mtype) {
         .normal => {
             self.board[m.dest_coord] = Place.empty;
-            self.board[m.src_coord] = Place{ .ptype = m.src_ptype, .id = m.id };
-            self.where[m.id] = m.src_coord;
-            self.pieces[m.id] = m.src_ptype;
+            self.board[m.src_coord] = m.src_place;
+            self.where[m.id()] = m.src_coord;
+            self.pieces[m.id()] = m.srcPtype();
         },
         .capture => {
             self.board[m.dest_coord] = Place.empty;
             self.pieces[m.capture_place.id] = m.capture_place.ptype;
             self.board[m.capture_coord] = m.capture_place;
-            self.board[m.src_coord] = Place{ .ptype = m.src_ptype, .id = m.id };
-            self.where[m.id] = m.src_coord;
-            self.pieces[m.id] = m.src_ptype;
+            self.board[m.src_coord] = m.src_place;
+            self.where[m.id()] = m.src_coord;
+            self.pieces[m.id()] = m.srcPtype();
         },
         .castle => {
             self.board[m.code.dest()] = Place.empty;
             self.board[m.dest_coord] = Place.empty;
-            self.board[m.code.src()] = Place{ .ptype = .k, .id = m.id & 0x10 };
-            self.board[m.src_coord] = Place{ .ptype = .r, .id = m.id };
-            self.where[m.id & 0x10] = m.code.src();
-            self.where[m.id] = m.src_coord;
+            self.board[m.code.src()] = Place{ .ptype = .k, .id = m.id() & 0x10 };
+            self.board[m.src_coord] = Place{ .ptype = .r, .id = m.id() };
+            self.where[m.id() & 0x10] = m.code.src();
+            self.where[m.id()] = m.src_coord;
         },
     }
     self.state = old_state;

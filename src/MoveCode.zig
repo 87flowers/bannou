@@ -35,11 +35,19 @@ pub fn isPromotion(self: MoveCode) bool {
 }
 
 pub fn src(self: MoveCode) u8 {
-    return coord.uncompress(@truncate(self.code >> 9));
+    return coord.uncompress(self.compressedSrc());
 }
 
 pub fn dest(self: MoveCode) u8 {
-    return coord.uncompress(@truncate(self.code >> 3));
+    return coord.uncompress(self.compressedDest());
+}
+
+pub fn compressedSrc(self: MoveCode) u6 {
+    return @truncate(self.code >> 9);
+}
+
+pub fn compressedDest(self: MoveCode) u6 {
+    return @truncate(self.code >> 3);
 }
 
 pub fn compressedPair(self: MoveCode) u12 {

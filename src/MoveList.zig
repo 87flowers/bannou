@@ -140,11 +140,10 @@ fn add(self: *MoveList, comptime mode: MoveGeneratorMode, ptype: PieceType, id: 
     if (mode == .captures_only) return;
     self.moves[self.size] = .{
         .code = MoveCode.make(ptype, src, ptype, dest),
-        .id = id,
         .src_coord = src,
-        .src_ptype = ptype,
+        .src_place = .{ .ptype = ptype, .id = id },
         .dest_coord = dest,
-        .dest_ptype = ptype,
+        .dest_place = .{ .ptype = ptype, .id = id },
         .capture_coord = dest,
         .capture_place = Place.empty,
         .enpassant = 0xFF,
@@ -158,11 +157,10 @@ fn addPawnOne(self: *MoveList, comptime mode: MoveGeneratorMode, ptype: PieceTyp
     if (mode == .captures_only and has_capture != .capture) return;
     self.moves[self.size] = .{
         .code = MoveCode.make(ptype, src, ptype, dest),
-        .id = id,
         .src_coord = src,
-        .src_ptype = ptype,
+        .src_place = .{ .ptype = ptype, .id = id },
         .dest_coord = dest,
-        .dest_ptype = ptype,
+        .dest_place = .{ .ptype = ptype, .id = id },
         .capture_coord = dest,
         .capture_place = capture_place,
         .enpassant = 0xFF,
@@ -178,11 +176,10 @@ fn addPawnTwo(self: *MoveList, comptime mode: MoveGeneratorMode, ptype: PieceTyp
     if (mode == .captures_only) return;
     self.moves[self.size] = .{
         .code = MoveCode.make(ptype, src, ptype, dest),
-        .id = id,
         .src_coord = src,
-        .src_ptype = ptype,
+        .src_place = .{ .ptype = ptype, .id = id },
         .dest_coord = dest,
-        .dest_ptype = ptype,
+        .dest_place = .{ .ptype = ptype, .id = id },
         .capture_coord = dest,
         .capture_place = Place.empty,
         .enpassant = enpassant,
@@ -196,11 +193,10 @@ fn addPawnPromotion(self: *MoveList, comptime mode: MoveGeneratorMode, src_ptype
     if (mode == .captures_only and has_capture != .capture) return;
     self.moves[self.size] = .{
         .code = MoveCode.make(src_ptype, src, dest_ptype, dest),
-        .id = id,
         .src_coord = src,
-        .src_ptype = src_ptype,
+        .src_place = .{ .ptype = src_ptype, .id = id },
         .dest_coord = dest,
-        .dest_ptype = dest_ptype,
+        .dest_place = .{ .ptype = dest_ptype, .id = id },
         .capture_coord = dest,
         .capture_place = capture_place,
         .enpassant = 0xFF,
@@ -217,11 +213,10 @@ fn addCapture(self: *MoveList, comptime mode: MoveGeneratorMode, ptype: PieceTyp
     _ = mode;
     self.moves[self.size] = .{
         .code = MoveCode.make(ptype, src, ptype, dest),
-        .id = id,
         .src_coord = src,
-        .src_ptype = ptype,
+        .src_place = .{ .ptype = ptype, .id = id },
         .dest_coord = dest,
-        .dest_ptype = ptype,
+        .dest_place = .{ .ptype = ptype, .id = id },
         .capture_coord = dest,
         .capture_place = capture_place,
         .enpassant = 0xFF,
@@ -236,11 +231,10 @@ fn addEnpassant(self: *MoveList, comptime mode: MoveGeneratorMode, ptype: PieceT
     _ = mode;
     self.moves[self.size] = .{
         .code = MoveCode.make(ptype, src, ptype, enpassant_coord),
-        .id = id,
         .src_coord = src,
-        .src_ptype = ptype,
+        .src_place = .{ .ptype = ptype, .id = id },
         .dest_coord = enpassant_coord,
-        .dest_ptype = ptype,
+        .dest_place = .{ .ptype = ptype, .id = id },
         .capture_coord = capture_coord,
         .capture_place = capture_place,
         .enpassant = 0xFF,
@@ -253,11 +247,10 @@ fn addCastle(self: *MoveList, comptime mode: MoveGeneratorMode, rook_id: u5, src
     if (mode == .captures_only) return;
     self.moves[self.size] = .{
         .code = MoveCode.make(.k, src_king, .k, dest_king),
-        .id = rook_id,
         .src_coord = src_rook,
-        .src_ptype = .r,
+        .src_place = .{ .ptype = .r, .id = rook_id },
         .dest_coord = dest_rook,
-        .dest_ptype = .r,
+        .dest_place = .{ .ptype = .r, .id = rook_id },
         .capture_coord = dest_rook,
         .capture_place = Place.empty,
         .enpassant = 0xFF,

@@ -1,13 +1,25 @@
 code: MoveCode,
-id: u5,
 src_coord: u8,
-src_ptype: PieceType,
+src_place: Place,
 dest_coord: u8,
-dest_ptype: PieceType,
+dest_place: Place,
 capture_coord: u8,
 capture_place: Place,
 enpassant: u8,
 mtype: MoveType,
+
+pub fn id(self: *const Move) u5 {
+    assert(self.src_place.id == self.dest_place.id);
+    return self.src_place.id;
+}
+
+pub fn srcPtype(self: *const Move) PieceType {
+    return self.src_place.ptype;
+}
+
+pub fn destPtype(self: *const Move) PieceType {
+    return self.dest_place.ptype;
+}
 
 pub fn isCapture(self: *const Move) bool {
     assert(!self.capture_place.isEmpty() == (self.mtype == .capture));
@@ -15,7 +27,7 @@ pub fn isCapture(self: *const Move) bool {
 }
 
 pub fn isPromotion(self: *const Move) bool {
-    return self.src_ptype != self.dest_ptype;
+    return self.srcPtype() != self.destPtype();
 }
 
 pub fn isTactical(self: *const Move) bool {
@@ -27,7 +39,7 @@ pub fn format(self: *const Move, comptime _: []const u8, _: std.fmt.FormatOption
 }
 
 pub fn getNewState(self: *const Move, state: State) State {
-    const color = Color.fromId(self.id);
+    const color = Color.fromId(self.id());
     return switch (self.mtype) {
         .normal => .{
             .castle = state.castle | coord.toBit(self.src_coord) | coord.toBit(self.dest_coord),
@@ -36,8 +48,8 @@ pub fn getNewState(self: *const Move, state: State) State {
             .ply = state.ply + 1,
             .hash = state.hash ^
                 zhash.move ^
-                zhash.piece(color, self.src_ptype, self.src_coord) ^
-                zhash.piece(color, self.dest_ptype, self.dest_coord) ^
+                zhash.piece(color, self.srcPtype(), self.src_coord) ^
+                zhash.piece(color, self.destPtype(), self.dest_coord) ^
                 zhash.enpassant(state.enpassant) ^
                 zhash.enpassant(self.enpassant) ^
                 zhash.castle(state.castle) ^
@@ -65,8 +77,8 @@ pub fn getNewState(self: *const Move, state: State) State {
             .ply = state.ply + 1,
             .hash = state.hash ^
                 zhash.move ^
-                zhash.piece(color, self.src_ptype, self.src_coord) ^
-                zhash.piece(color, self.dest_ptype, self.dest_coord) ^
+                zhash.piece(color, self.srcPtype(), self.src_coord) ^
+                zhash.piece(color, self.destPtype(), self.dest_coord) ^
                 zhash.piece(color.invert(), self.capture_place.ptype, self.capture_coord) ^
                 zhash.enpassant(state.enpassant) ^
                 zhash.castle(state.castle) ^

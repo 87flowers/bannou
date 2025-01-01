@@ -114,8 +114,8 @@ pub fn sortMoves(self: *Game, moves: *MoveList, tt_move: MoveCode) void {
             if (m.code.code == tt_move.code)
                 break :blk @as(i32, 127 << 24);
             if (m.isCapture())
-                break :blk @as(i32, 125 << 24) + (@as(i32, @intFromEnum(m.capture_place.ptype)) << 8) - @intFromEnum(m.src_ptype);
-            if (m.isPromotion() and m.dest_ptype == .q)
+                break :blk @as(i32, 125 << 24) + (@as(i32, @intFromEnum(m.capture_place.ptype)) << 8) - @intFromEnum(m.srcPtype());
+            if (m.isPromotion() and m.destPtype() == .q)
                 break :blk @as(i32, 124 << 24);
             if (m.code.code == killer.code)
                 break :blk @as(i32, 123 << 24) + 1;
@@ -148,7 +148,7 @@ fn updateCounter(self: *Game, m: Move) void {
 }
 
 fn getHistory(self: *Game, m: Move) *i32 {
-    const ptype: usize = @intFromEnum(m.dest_ptype) - 1;
+    const ptype: usize = @intFromEnum(m.destPtype()) - 1;
     const src: usize = coord.compress(m.src_coord);
     const dest: usize = coord.compress(m.dest_coord);
     return &self.history[ptype * 64 * 64 + src * 64 + dest];
@@ -177,7 +177,7 @@ pub fn recordHistory(self: *Game, depth: i32, moves: *const MoveList, i: usize) 
 
         // History penalty
         for (moves.moves[0..i]) |badm| {
-            if (badm.isCapture() or (m.isPromotion() and m.dest_ptype == .q)) continue;
+            if (badm.isCapture() or (m.isPromotion() and m.destPtype() == .q)) continue;
             if (badm.code.code == old_killer.code) continue;
             if (badm.code.code == old_counter.code) continue;
             self.updateHistory(badm, -adjustment);
