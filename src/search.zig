@@ -211,7 +211,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
         game.recordHistory(depth, &moves, best_i);
     }
 
-    if (best_score == eval.no_moves) {
+    if (mode != .quiescence and moves_visited == 0) {
         pv.writeEmpty();
         if (!is_in_check) {
             return eval.draw;
