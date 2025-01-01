@@ -104,12 +104,17 @@ pub fn move(self: *Board, m: Move) State {
     const result = self.state;
     switch (m.mtype) {
         .normal => {
-            if (m.isCapture()) {
-                assert(self.pieces[m.capture_place.id] == m.capture_place.ptype);
-                assert(self.board[m.capture_coord].eql(m.capture_place));
-                self.pieces[m.capture_place.id] = .none;
-                self.board[m.capture_coord] = Place.empty;
-            }
+            assert(self.board[m.src_coord].eql(.{ .ptype = m.src_ptype, .id = m.id }));
+            self.board[m.src_coord] = Place.empty;
+            self.board[m.dest_coord] = Place{ .ptype = m.dest_ptype, .id = m.id };
+            self.where[m.id] = m.dest_coord;
+            self.pieces[m.id] = m.dest_ptype;
+        },
+        .capture => {
+            assert(self.pieces[m.capture_place.id] == m.capture_place.ptype);
+            assert(self.board[m.capture_coord].eql(m.capture_place));
+            self.pieces[m.capture_place.id] = .none;
+            self.board[m.capture_coord] = Place.empty;
             assert(self.board[m.src_coord].eql(.{ .ptype = m.src_ptype, .id = m.id }));
             self.board[m.src_coord] = Place.empty;
             self.board[m.dest_coord] = Place{ .ptype = m.dest_ptype, .id = m.id };
@@ -125,9 +130,9 @@ pub fn move(self: *Board, m: Move) State {
             self.where[m.id] = m.dest_coord;
         },
     }
-    self.state = m.state;
+    self.state = m.getNewState(self.state);
     self.active_color = self.active_color.invert();
-    self.zhistory[m.state.ply] = m.state.hash;
+    self.zhistory[self.state.ply] = self.state.hash;
     assert(self.state.hash == self.calcHashSlow());
     return result;
 }
@@ -318,10 +323,14 @@ pub fn unmove(self: *Board, m: Move, old_state: State) void {
     switch (m.mtype) {
         .normal => {
             self.board[m.dest_coord] = Place.empty;
-            if (m.isCapture()) {
-                self.pieces[m.capture_place.id] = m.capture_place.ptype;
-                self.board[m.capture_coord] = m.capture_place;
-            }
+            self.board[m.src_coord] = Place{ .ptype = m.src_ptype, .id = m.id };
+            self.where[m.id] = m.src_coord;
+            self.pieces[m.id] = m.src_ptype;
+        },
+        .capture => {
+            self.board[m.dest_coord] = Place.empty;
+            self.pieces[m.capture_place.id] = m.capture_place.ptype;
+            self.board[m.capture_coord] = m.capture_place;
             self.board[m.src_coord] = Place{ .ptype = m.src_ptype, .id = m.id };
             self.where[m.id] = m.src_coord;
             self.pieces[m.id] = m.src_ptype;
