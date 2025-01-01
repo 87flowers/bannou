@@ -109,6 +109,7 @@ pub fn move(self: *Board, m: Move) State {
             self.board[m.code.dest()] = m.dest_place;
             self.where[m.id()] = m.code.dest();
             self.pieces[m.id()] = m.destPtype();
+            self.state = m.getNewState(self.state);
         },
         .capture => {
             assert(self.pieces[m.capture_place.id] == m.capture_place.ptype);
@@ -120,6 +121,7 @@ pub fn move(self: *Board, m: Move) State {
             self.board[m.code.dest()] = m.dest_place;
             self.where[m.id()] = m.code.dest();
             self.pieces[m.id()] = m.destPtype();
+            self.state = m.getNewState(self.state);
         },
         .castle => {
             assert(m.srcPtype() == .r and m.destPtype() == .r);
@@ -132,9 +134,9 @@ pub fn move(self: *Board, m: Move) State {
             self.board[coord.uncompress(rook_dest)] = Place{ .ptype = .r, .id = m.id() };
             self.where[m.id() & 0x10] = coord.uncompress(king_dest);
             self.where[m.id()] = coord.uncompress(rook_dest);
+            self.state = m.getNewState(self.state);
         },
     }
-    self.state = m.getNewState(self.state);
     self.active_color = self.active_color.invert();
     self.zhistory[self.state.ply] = self.state.hash;
     assert(self.state.hash == self.calcHashSlow());
