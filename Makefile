@@ -6,7 +6,7 @@ ifndef EXE
 EXE=bannou
 endif
 ifeq ($(OS),Windows_NT)
-MV=move .\zig-out\bin\bannou $(EXE).exe
+MV=move .\zig-out\bin\bannou.exe $(EXE).exe
 else
 MV=mv ./zig-out/bin/bannou $(EXE)
 endif
