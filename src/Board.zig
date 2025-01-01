@@ -83,7 +83,7 @@ pub fn place(self: *Board, id: u5, ptype: PieceType, where: u8) void {
     self.pieces[id] = ptype;
     self.where[id] = where;
     self.board[where] = Place{ .ptype = ptype, .id = id };
-    self.state.hash ^= zhash.piece(Color.fromId(id), ptype, where);
+    self.state.hash ^= zhash.piece(Color.fromId(id), ptype, coord.compress(where));
     self.zhistory[self.state.ply] = self.state.hash;
     assert(self.state.hash == self.calcHashSlow());
 }
@@ -92,7 +92,7 @@ pub fn unplace(self: *Board, id: u5) void {
     assert(self.pieces[id] != .none and !self.board[self.where[id]].isEmpty());
     const ptype = self.pieces[id];
     const where = self.where[id];
-    self.state.hash ^= zhash.piece(Color.fromId(id), ptype, where);
+    self.state.hash ^= zhash.piece(Color.fromId(id), ptype, coord.compress(where));
     self.zhistory[self.state.ply] = self.state.hash;
     self.pieces[id] = .none;
     self.where[id] = 0xFF;
@@ -104,10 +104,10 @@ pub fn move(self: *Board, m: Move) State {
     const result = self.state;
     switch (m.mtype) {
         .normal => {
-            assert(self.board[m.src_coord].eql(m.src_place));
-            self.board[m.src_coord] = Place.empty;
-            self.board[m.dest_coord] = m.dest_place;
-            self.where[m.id()] = m.dest_coord;
+            assert(self.board[m.code.src()].eql(m.src_place));
+            self.board[m.code.src()] = Place.empty;
+            self.board[m.code.dest()] = m.dest_place;
+            self.where[m.id()] = m.code.dest();
             self.pieces[m.id()] = m.destPtype();
         },
         .capture => {
@@ -115,19 +115,23 @@ pub fn move(self: *Board, m: Move) State {
             assert(self.board[m.capture_coord].eql(m.capture_place));
             self.pieces[m.capture_place.id] = .none;
             self.board[m.capture_coord] = Place.empty;
-            assert(self.board[m.src_coord].eql(m.src_place));
-            self.board[m.src_coord] = Place.empty;
-            self.board[m.dest_coord] = m.dest_place;
-            self.where[m.id()] = m.dest_coord;
+            assert(self.board[m.code.src()].eql(m.src_place));
+            self.board[m.code.src()] = Place.empty;
+            self.board[m.code.dest()] = m.dest_place;
+            self.where[m.id()] = m.code.dest();
             self.pieces[m.id()] = m.destPtype();
         },
         .castle => {
-            self.board[m.code.src()] = Place.empty;
-            self.board[m.src_coord] = Place.empty;
-            self.board[m.code.dest()] = Place{ .ptype = .k, .id = m.id() & 0x10 };
-            self.board[m.dest_coord] = Place{ .ptype = .r, .id = m.id() };
-            self.where[m.id() & 0x10] = m.code.dest();
-            self.where[m.id()] = m.dest_coord;
+            assert(m.srcPtype() == .r and m.destPtype() == .r);
+            const king_src = m.code.compressedSrc();
+            const king_dest = m.code.compressedDest();
+            const rook_src: u6, const rook_dest: u6 = getCastlingRookMove(king_dest);
+            self.board[coord.uncompress(king_src)] = Place.empty;
+            self.board[coord.uncompress(rook_src)] = Place.empty;
+            self.board[coord.uncompress(king_dest)] = Place{ .ptype = .k, .id = m.id() & 0x10 };
+            self.board[coord.uncompress(rook_dest)] = Place{ .ptype = .r, .id = m.id() };
+            self.where[m.id() & 0x10] = coord.uncompress(king_dest);
+            self.where[m.id()] = coord.uncompress(rook_dest);
         },
     }
     self.state = m.getNewState(self.state);
@@ -322,26 +326,30 @@ test {
 pub fn unmove(self: *Board, m: Move, old_state: State) void {
     switch (m.mtype) {
         .normal => {
-            self.board[m.dest_coord] = Place.empty;
-            self.board[m.src_coord] = m.src_place;
-            self.where[m.id()] = m.src_coord;
+            self.board[m.code.dest()] = Place.empty;
+            self.board[m.code.src()] = m.src_place;
+            self.where[m.id()] = m.code.src();
             self.pieces[m.id()] = m.srcPtype();
         },
         .capture => {
-            self.board[m.dest_coord] = Place.empty;
+            self.board[m.code.dest()] = Place.empty;
             self.pieces[m.capture_place.id] = m.capture_place.ptype;
             self.board[m.capture_coord] = m.capture_place;
-            self.board[m.src_coord] = m.src_place;
-            self.where[m.id()] = m.src_coord;
+            self.board[m.code.src()] = m.src_place;
+            self.where[m.id()] = m.code.src();
             self.pieces[m.id()] = m.srcPtype();
         },
         .castle => {
-            self.board[m.code.dest()] = Place.empty;
-            self.board[m.dest_coord] = Place.empty;
-            self.board[m.code.src()] = Place{ .ptype = .k, .id = m.id() & 0x10 };
-            self.board[m.src_coord] = Place{ .ptype = .r, .id = m.id() };
-            self.where[m.id() & 0x10] = m.code.src();
-            self.where[m.id()] = m.src_coord;
+            assert(m.srcPtype() == .r and m.destPtype() == .r);
+            const king_src = m.code.compressedSrc();
+            const king_dest = m.code.compressedDest();
+            const rook_src: u6, const rook_dest: u6 = getCastlingRookMove(king_dest);
+            self.board[coord.uncompress(king_dest)] = Place.empty;
+            self.board[coord.uncompress(rook_dest)] = Place.empty;
+            self.board[coord.uncompress(king_src)] = Place{ .ptype = .k, .id = m.id() & 0x10 };
+            self.board[coord.uncompress(rook_src)] = Place{ .ptype = .r, .id = m.id() };
+            self.where[m.id() & 0x10] = coord.uncompress(king_src);
+            self.where[m.id()] = coord.uncompress(rook_src);
         },
     }
     self.state = old_state;
@@ -424,7 +432,7 @@ pub fn calcHashSlow(self: *const Board) Hash {
     for (0..32) |i| {
         const ptype = self.pieces[i];
         const where = self.where[i];
-        if (ptype != .none) result ^= zhash.piece(Color.fromId(@intCast(i)), ptype, where);
+        if (ptype != .none) result ^= zhash.piece(Color.fromId(@intCast(i)), ptype, coord.compress(where));
     }
     result ^= zhash.enpassant(self.state.enpassant);
     result ^= zhash.castle(self.state.castle);
@@ -557,6 +565,7 @@ const Board = @This();
 const std = @import("std");
 const assert = std.debug.assert;
 const getPawnCaptures = @import("common.zig").getPawnCaptures;
+const getCastlingRookMove = @import("common.zig").getCastlingRookMove;
 const common = @import("common.zig");
 const coord = @import("coord.zig");
 const zhash = @import("zhash.zig");

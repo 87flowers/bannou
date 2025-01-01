@@ -140,9 +140,7 @@ fn add(self: *MoveList, comptime mode: MoveGeneratorMode, ptype: PieceType, id: 
     if (mode == .captures_only) return;
     self.moves[self.size] = .{
         .code = MoveCode.make(ptype, src, ptype, dest),
-        .src_coord = src,
         .src_place = .{ .ptype = ptype, .id = id },
-        .dest_coord = dest,
         .dest_place = .{ .ptype = ptype, .id = id },
         .capture_coord = dest,
         .capture_place = Place.empty,
@@ -157,9 +155,7 @@ fn addPawnOne(self: *MoveList, comptime mode: MoveGeneratorMode, ptype: PieceTyp
     if (mode == .captures_only and has_capture != .capture) return;
     self.moves[self.size] = .{
         .code = MoveCode.make(ptype, src, ptype, dest),
-        .src_coord = src,
         .src_place = .{ .ptype = ptype, .id = id },
-        .dest_coord = dest,
         .dest_place = .{ .ptype = ptype, .id = id },
         .capture_coord = dest,
         .capture_place = capture_place,
@@ -176,9 +172,7 @@ fn addPawnTwo(self: *MoveList, comptime mode: MoveGeneratorMode, ptype: PieceTyp
     if (mode == .captures_only) return;
     self.moves[self.size] = .{
         .code = MoveCode.make(ptype, src, ptype, dest),
-        .src_coord = src,
         .src_place = .{ .ptype = ptype, .id = id },
-        .dest_coord = dest,
         .dest_place = .{ .ptype = ptype, .id = id },
         .capture_coord = dest,
         .capture_place = Place.empty,
@@ -193,9 +187,7 @@ fn addPawnPromotion(self: *MoveList, comptime mode: MoveGeneratorMode, src_ptype
     if (mode == .captures_only and has_capture != .capture) return;
     self.moves[self.size] = .{
         .code = MoveCode.make(src_ptype, src, dest_ptype, dest),
-        .src_coord = src,
         .src_place = .{ .ptype = src_ptype, .id = id },
-        .dest_coord = dest,
         .dest_place = .{ .ptype = dest_ptype, .id = id },
         .capture_coord = dest,
         .capture_place = capture_place,
@@ -213,9 +205,7 @@ fn addCapture(self: *MoveList, comptime mode: MoveGeneratorMode, ptype: PieceTyp
     _ = mode;
     self.moves[self.size] = .{
         .code = MoveCode.make(ptype, src, ptype, dest),
-        .src_coord = src,
         .src_place = .{ .ptype = ptype, .id = id },
-        .dest_coord = dest,
         .dest_place = .{ .ptype = ptype, .id = id },
         .capture_coord = dest,
         .capture_place = capture_place,
@@ -231,9 +221,7 @@ fn addEnpassant(self: *MoveList, comptime mode: MoveGeneratorMode, ptype: PieceT
     _ = mode;
     self.moves[self.size] = .{
         .code = MoveCode.make(ptype, src, ptype, enpassant_coord),
-        .src_coord = src,
         .src_place = .{ .ptype = ptype, .id = id },
-        .dest_coord = enpassant_coord,
         .dest_place = .{ .ptype = ptype, .id = id },
         .capture_coord = capture_coord,
         .capture_place = capture_place,
@@ -244,12 +232,11 @@ fn addEnpassant(self: *MoveList, comptime mode: MoveGeneratorMode, ptype: PieceT
 }
 
 fn addCastle(self: *MoveList, comptime mode: MoveGeneratorMode, rook_id: u5, src_rook: u8, dest_rook: u8, src_king: u8, dest_king: u8) void {
+    _ = src_rook;
     if (mode == .captures_only) return;
     self.moves[self.size] = .{
         .code = MoveCode.make(.k, src_king, .k, dest_king),
-        .src_coord = src_rook,
         .src_place = .{ .ptype = .r, .id = rook_id },
-        .dest_coord = dest_rook,
         .dest_place = .{ .ptype = .r, .id = rook_id },
         .capture_coord = dest_rook,
         .capture_place = Place.empty,

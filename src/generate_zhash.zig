@@ -11,7 +11,7 @@ pub fn main() !void {
     const Hash = u64;
     try output.print("pub const Hash = u64;\n\n", .{});
 
-    try output.print("const piece_table = [12 * 128]Hash{{\n", .{});
+    try output.print("const piece_table = [12 * 64]Hash{{\n", .{});
     for (0..12) |pc| {
         const ptype = pc >> 1;
         const color = pc & 1;
@@ -32,7 +32,7 @@ pub fn main() !void {
             try output.print("0x{X:016}, ", .{h});
 
             if (where % 8 == 7) {
-                try output.print("0, 0, 0, 0, 0, 0, 0, 0,\n", .{});
+                try output.print("\n", .{});
             }
         }
     }
@@ -46,7 +46,8 @@ pub fn main() !void {
         const h: Hash = toZhash(pm[7 * 64 + i]);
         try output.print("0x{X:016}, ", .{h});
     }
-    try output.print("0, 0, 0, 0, 0, 0, 0, 0,\n", .{});
+    try output.print("\n", .{});
+    try output.print("    0, 0, 0, 0, 0, 0, 0, 0,\n", .{});
     try output.print("}};\n", .{});
 
     try output.print("\n", .{});

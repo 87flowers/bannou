@@ -149,9 +149,7 @@ fn updateCounter(self: *Game, m: Move) void {
 
 fn getHistory(self: *Game, m: Move) *i32 {
     const ptype: usize = @intFromEnum(m.destPtype()) - 1;
-    const src: usize = coord.compress(m.src_coord);
-    const dest: usize = coord.compress(m.dest_coord);
-    return &self.history[ptype * 64 * 64 + src * 64 + dest];
+    return &self.history[ptype * 64 * 64 + m.code.compressedPair()];
 }
 
 fn updateHistory(self: *Game, m: Move, adjustment: i32) void {
