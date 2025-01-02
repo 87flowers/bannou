@@ -81,31 +81,36 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
         return tte.score;
     }
 
+    const is_in_check = game.board.isInCheck();
+
     // Static evaluation with TT replacement
-    const first_static_eval = eval.eval(game);
-    const static_eval = if (switch (tte.bound) {
-        .empty => false,
-        .lower => tte.score >= first_static_eval,
-        .exact => true,
-        .upper => tte.score <= first_static_eval,
-    })
-        tte.score
-    else
-        first_static_eval;
+    const static_eval: Score = blk: {
+        // Eval while in check makes no sense
+        if (is_in_check) break :blk undefined;
+
+        const first_static_eval = eval.eval(game);
+        break :blk if (switch (tte.bound) {
+            .empty => false,
+            .lower => tte.score >= first_static_eval,
+            .exact => true,
+            .upper => tte.score <= first_static_eval,
+        })
+            tte.score
+        else
+            first_static_eval;
+    };
 
     var best_score: Score = eval.no_moves;
     var best_move: MoveCode = tte.move();
 
     // Stand-pat (for quiescence search)
-    if (mode == .quiescence) {
+    if (mode == .quiescence and !is_in_check) {
         best_score = static_eval;
         if (static_eval >= beta) {
             pv.writeEmpty();
             return static_eval;
         }
     }
-
-    const is_in_check = game.board.isInCheck();
 
     // Reverse futility pruning
     if (!is_pv_node and !is_in_check and mode != .quiescence and static_eval -| depth * 100 > beta) {
@@ -135,9 +140,10 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
     }
 
     var moves = MoveList{};
-    switch (mode) {
-        .firstply, .normal, .nullmove => moves.generateMoves(&game.board, .any),
-        .quiescence => moves.generateMoves(&game.board, .captures_only),
+    if (mode != .quiescence or is_in_check) {
+        moves.generateMoves(&game.board, .any);
+    } else {
+        moves.generateMoves(&game.board, .captures_only);
     }
     game.sortMoves(&moves, best_move);
 
