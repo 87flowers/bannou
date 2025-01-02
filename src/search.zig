@@ -81,6 +81,8 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
         return tte.score;
     }
 
+    const is_in_check = game.board.isInCheck();
+
     // Static evaluation with TT replacement
     const first_static_eval = eval.eval(game);
     const static_eval = if (switch (tte.bound) {
@@ -97,15 +99,13 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
     var best_move: MoveCode = tte.move();
 
     // Stand-pat (for quiescence search)
-    if (mode == .quiescence) {
+    if (mode == .quiescence and !is_in_check) {
         best_score = static_eval;
         if (static_eval >= beta) {
             pv.writeEmpty();
             return static_eval;
         }
     }
-
-    const is_in_check = game.board.isInCheck();
 
     // Reverse futility pruning
     if (!is_pv_node and !is_in_check and mode != .quiescence and static_eval -| depth * 100 > beta) {
@@ -135,9 +135,10 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
     }
 
     var moves = MoveList{};
-    switch (mode) {
-        .firstply, .normal, .nullmove => moves.generateMoves(&game.board, .any),
-        .quiescence => moves.generateMoves(&game.board, .captures_only),
+    if (mode != .quiescence or is_in_check) {
+        moves.generateMoves(&game.board, .any);
+    } else {
+        moves.generateMoves(&game.board, .captures_only);
     }
     game.sortMoves(&moves, best_move);
 
@@ -155,6 +156,11 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
                 if (!is_in_check and quiets_visited > lmp_threshold) {
                     break;
                 }
+            }
+
+            // Check evasion in quiescence (try only one quiet evasion move)
+            if (mode == .quiescence and !m.isTactical()) {
+                if (quiets_visited > 1) break;
             }
 
             var child_pv = pv.newChild();
@@ -191,7 +197,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
 
             ctrl.nodeVisited();
             moves_visited += 1;
-            if (mode != .quiescence and !m.isTactical()) {
+            if (!m.isTactical()) {
                 quiets_visited += 1;
             }
 
