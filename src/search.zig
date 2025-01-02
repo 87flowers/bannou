@@ -146,6 +146,13 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
     var quiets_visited: usize = 0;
     for (0..moves.size) |i| {
         const m = moves.moves[i];
+
+        // Quiescence Late Move Pruning
+        if (mode == .quiescence) {
+            const lmp_threshold = 2 + (3 -| @abs(depth));
+            if (moves_visited > lmp_threshold) break;
+        }
+
         const old_state = game.move(m);
         defer game.unmove(m, old_state);
         if (game.board.isValid()) {
