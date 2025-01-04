@@ -176,6 +176,12 @@ pub fn clampScore(raw: anytype) Score {
 pub fn isMateScore(score: Score) bool {
     return @abs(score) > 8000;
 }
+pub fn isMated(score: Score) bool {
+    return score < -8000;
+}
+pub fn isMating(score: Score) bool {
+    return score > 8000;
+}
 
 pub const Score = i14;
 pub const no_moves: Score = -std.math.maxInt(Score);
