@@ -155,7 +155,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
         defer game.unmove(m, old_state);
         if (game.board.isValid()) {
             // Late Move Pruning
-            if (mode != .quiescence and !m.isTactical() and !is_pv_node) {
+            if (mode != .quiescence and !is_pv_node and !m.isTactical() and !eval.isMateScore(best_score)) {
                 const lmp_threshold = 2 + (depth << 2);
                 if (!is_in_check and quiets_visited > lmp_threshold) {
                     break;
