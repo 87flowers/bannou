@@ -96,7 +96,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
         first_static_eval;
 
     // Internal Iterative Reductions
-    if (mode == .normal and tte.isEmpty() and depth > 3) depth -= 1;
+    if (mode == .normal and depth - tte.depth > 3) depth -= 1;
 
     var best_score: Score = eval.no_moves;
     var best_move: MoveCode = tte.move();
