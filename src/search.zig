@@ -57,7 +57,9 @@ fn search2(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, p
         try search(game, ctrl, pv, alpha, beta, ply, depth, mode);
 }
 
-fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, ply: u32, depth: i32, comptime mode: SearchMode) SearchError!Score {
+fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, ply: u32, depth_arg: i32, comptime mode: SearchMode) SearchError!Score {
+    var depth = depth_arg;
+
     // Preconditions for optimizer to be aware of.
     if (mode != .quiescence) assert(depth > 0);
     if (mode == .quiescence) assert(depth <= 0);
@@ -92,6 +94,9 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
         tte.score
     else
         first_static_eval;
+
+    // Internal Iterative Reductions
+    if (mode == .normal and tte.isEmpty() and depth > 3) depth -= 1;
 
     var best_score: Score = eval.no_moves;
     var best_move: MoveCode = tte.move();

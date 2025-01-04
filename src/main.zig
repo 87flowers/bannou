@@ -133,7 +133,7 @@ const Uci = struct {
             g.reset();
         } else if (std.mem.eql(u8, command, "uci")) {
             try self.output.print(
-                \\id name Bannou 0.53
+                \\id name Bannou 0.54
                 \\id author 87 (87flowers.com)
                 \\option name Hash type spin default {} min 1 max 65535
                 \\option name Threads type spin default 1 min 1 max 1
