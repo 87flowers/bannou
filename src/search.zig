@@ -70,7 +70,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
     const is_pv_node = beta != alpha + 1;
 
     const tte = game.ttLoad();
-    const tthit = !tte.isEmpty() and tte.depth >= depth;
+    const tthit = !tte.isEmpty() and tte.depth >= depth_arg;
 
     // Transposition Table Pruning
     if (!is_pv_node and tthit and switch (tte.bound) {
@@ -234,7 +234,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
             best_move
         else
             tte.move(),
-        .depth = @intCast(std.math.clamp(depth, 0, 127)),
+        .depth = @intCast(std.math.clamp(depth_arg, 0, 127)),
         .score = best_score,
         .bound = if (best_score >= beta)
             .lower
