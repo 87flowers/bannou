@@ -125,7 +125,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
         // Null-move reduction and pruning
         if ((mode == .normal or mode == .nullmove) and depth > 2 and !game.prevMove().isNone()) {
             const old_state = game.moveNull();
-            const nws_reduction = 4 + @divFloor(depth, 6);
+            const nws_reduction = 4 + @divFloor(depth, 6) + @divFloor(@max(0, static_eval - beta), 150);
             const null_score = -try search2(game, ctrl, line.Null{}, -beta, -beta +| 1, ply + 1, depth - nws_reduction, .normal);
             game.unmoveNull(old_state);
             if (null_score >= beta) {
