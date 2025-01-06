@@ -184,7 +184,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
                     const r = std.math.clamp(reduction, 1, depth - 1);
                     if (r > 1) {
                         const lmr_score = -try search2(game, ctrl, &child_pv, -a - 1, -a, ply + 1, depth - r, mode);
-                        if (lmr_score <= a) break :blk lmr_score;
+                        if (lmr_score <= a or lmr_score >= beta) break :blk lmr_score;
                     }
                 }
 
