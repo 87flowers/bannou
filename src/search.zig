@@ -191,7 +191,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
                 // PVS Scout Search
                 if (mode != .quiescence and moves_visited != 0 and is_pv_node) {
                     const scout_score = -try search2(game, ctrl, &child_pv, -a - 1, -a, ply + 1, depth - 1, mode);
-                    if (scout_score <= a or scout_score >= beta) break :blk scout_score;
+                    if (scout_score <= a) break :blk scout_score;
                 }
 
                 break :blk -try search2(game, ctrl, &child_pv, -beta, -a, ply + 1, depth - 1, mode);
