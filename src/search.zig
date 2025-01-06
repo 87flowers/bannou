@@ -139,7 +139,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
                 // This is the same as a normal search except:
                 // - With a "pruneable" flag set (the .nullmove mode)
                 // - Depth reduced by 1
-                const nmr_reduction = 1 + @divFloor(depth, 6);
+                const nmr_reduction = 1;
                 return search(game, ctrl, line.Null{}, alpha, beta, ply, depth - nmr_reduction, .nullmove);
             }
         }
