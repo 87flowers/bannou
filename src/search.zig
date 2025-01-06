@@ -47,8 +47,8 @@ pub fn Control(comptime limit: struct {
 
 pub const Params = struct {
     iir_depth: i32 = 3,
-    rfp_base: i32 = 0,
-    rfp_mul: i32 = 100,
+    rfp_base: i32 = 2,
+    rfp_mul: i32 = 20,
     nmr_depth: i32 = 2,
     nmr_s_base: i32 = 4,
     nmr_s_div: i32 = 6,
@@ -58,8 +58,8 @@ pub const Params = struct {
     lmp_mul: i32 = 4,
     lmr_depth: i32 = 2,
     lmr_threshold: i32 = 2,
-    lmr_base: u32 = 192,
-    lmr_mul: u32 = 64,
+    lmr_base: u32 = 272,
+    lmr_mul: u32 = 33,
 };
 pub const TuneBounds = struct {
     iir_depth: [2]i32 = .{ 1, 7 },
