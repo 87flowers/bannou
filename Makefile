@@ -5,4 +5,4 @@ EXE=bannou
 endif
 
 default:
-	zig build-exe --name $(EXE) -fllvm -flto -fstrip -fno-incremental -static -target native -O ReleaseFast src/main.zig
+	zig build-exe --name $(EXE) -fllvm -flto -fstrip -static -target native -O ReleaseFast src/main.zig
