@@ -159,7 +159,7 @@ fn updateHistory(self: *Game, m: Move, adjustment: i32) void {
     h.* += adjustment - grav;
 }
 
-pub fn recordHistory(self: *Game, depth: i32, moves: *const MoveList, i: usize) void {
+pub fn recordHistory(self: *Game, depth: Ply, moves: *const MoveList, i: usize) void {
     const m = moves.moves[i];
     const old_killer = self.getKiller();
     const old_counter = self.getCounter();
@@ -171,7 +171,7 @@ pub fn recordHistory(self: *Game, depth: i32, moves: *const MoveList, i: usize) 
     }
 
     if (!m.isCapture()) {
-        const adjustment: i32 = depth * 1000 - 300;
+        const adjustment: i32 = depth.mulTrunc(1000) - 300;
 
         // History penalty
         for (moves.moves[0..i]) |badm| {
@@ -196,6 +196,7 @@ const Move = @import("Move.zig");
 const MoveCode = @import("MoveCode.zig");
 const MoveList = @import("MoveList.zig");
 const PieceType = @import("common.zig").PieceType;
+const Ply = @import("Ply.zig");
 const Score = @import("eval.zig").Score;
 const State = @import("State.zig");
 const TT = @import("TT.zig");

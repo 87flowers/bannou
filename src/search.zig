@@ -25,16 +25,16 @@ pub fn Control(comptime limit: struct {
         }
 
         /// Returns true if we should terminate the search
-        pub fn checkSoftTermination(self: *@This(), depth: i32) bool {
+        pub fn checkSoftTermination(self: *@This(), depth: Ply) bool {
             if (limit.time and self.time_limit.soft_deadline <= self.timer.read()) return true;
-            if (limit.depth and depth >= self.depth_limit.target_depth) return true;
+            if (limit.depth and depth.int() >= self.depth_limit.target_depth) return true;
             if (limit.nodes and self.nodes >= self.nodes_limit.target_nodes) return true;
             return false;
         }
 
         /// Raises SearchError.EarlyTermination if we should terminate the search
-        pub fn checkHardTermination(self: *@This(), comptime mode: SearchMode, depth: i32) SearchError!void {
-            if (limit.time and mode == .normal and depth > 3 and self.time_limit.hard_deadline <= self.timer.read()) return SearchError.EarlyTermination;
+        pub fn checkHardTermination(self: *@This(), comptime mode: SearchMode, depth: Ply) SearchError!void {
+            if (limit.time and mode == .normal and depth.int() > 3 and self.time_limit.hard_deadline <= self.timer.read()) return SearchError.EarlyTermination;
             if (limit.nodes and self.nodes >= self.nodes_limit.target_nodes) return SearchError.EarlyTermination;
         }
 
@@ -48,8 +48,8 @@ pub fn Control(comptime limit: struct {
 pub const TimeControl = Control(.{ .time = true });
 pub const DepthControl = Control(.{ .depth = true });
 
-fn search2(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, ply: u32, depth: i32, comptime mode: SearchMode) SearchError!Score {
-    return if (mode != .quiescence and depth <= 0)
+fn search2(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, ply: u32, depth: Ply, comptime mode: SearchMode) SearchError!Score {
+    return if (mode != .quiescence and depth.int() <= 0)
         try search(game, ctrl, pv, alpha, beta, ply, depth, .quiescence)
     else if (mode == .firstply)
         try search(game, ctrl, pv, alpha, beta, ply, depth, .normal)
@@ -57,12 +57,12 @@ fn search2(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, p
         try search(game, ctrl, pv, alpha, beta, ply, depth, mode);
 }
 
-fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, ply: u32, depth_arg: i32, comptime mode: SearchMode) SearchError!Score {
+fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, ply: u32, depth_arg: Ply, comptime mode: SearchMode) SearchError!Score {
     var depth = depth_arg;
 
     // Preconditions for optimizer to be aware of.
-    if (mode != .quiescence) assert(depth > 0);
-    if (mode == .quiescence) assert(depth <= 0);
+    if (mode != .quiescence) assert(depth.int() > 0);
+    if (mode == .quiescence) assert(depth.int() <= 0);
 
     try ctrl.checkHardTermination(mode, depth);
 
@@ -70,7 +70,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
     const is_pv_node = beta != alpha + 1;
 
     const tte = game.ttLoad();
-    const tthit = !tte.isEmpty() and tte.depth >= depth;
+    const tthit = !tte.isEmpty() and tte.depth >= depth.int();
 
     // Transposition Table Pruning
     if (!is_pv_node and tthit and switch (tte.bound) {
@@ -96,7 +96,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
         first_static_eval;
 
     // Internal Iterative Reductions
-    if (mode == .normal and tte.isEmpty() and depth > 3) depth -= 1;
+    if (mode == .normal and tte.isEmpty() and depth.int() > 3) depth = depth.subInt(1);
 
     var best_score: Score = eval.no_moves;
     var best_move: MoveCode = tte.move();
@@ -113,18 +113,18 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
     const is_in_check = game.board.isInCheck();
 
     // Check extension
-    if (is_in_check) depth += 1;
+    if (is_in_check) depth = depth.addInt(1);
 
     // Reverse futility pruning
-    if (!is_pv_node and !is_in_check and mode != .quiescence and static_eval -| depth * 100 > beta) {
+    if (!is_pv_node and !is_in_check and mode != .quiescence and static_eval -| depth.mulTrunc(100) > beta) {
         return static_eval;
     }
 
     // Null-move reduction and pruning
-    if (!is_in_check and (mode == .normal or mode == .nullmove) and depth > 2 and !game.prevMove().isNone()) {
+    if (!is_in_check and (mode == .normal or mode == .nullmove) and depth.int() > 2 and !game.prevMove().isNone()) {
         const old_state = game.moveNull();
-        const nws_reduction = 4 + @divFloor(depth, 6);
-        const null_score = -try search2(game, ctrl, line.Null{}, -beta, -beta +| 1, ply + 1, depth - nws_reduction, .normal);
+        const nws_reduction = 4 + depth.divTrunc(6);
+        const null_score = -try search2(game, ctrl, line.Null{}, -beta, -beta +| 1, ply + 1, depth.subInt(nws_reduction), .normal);
         game.unmoveNull(old_state);
         if (null_score >= beta) {
             if (mode == .nullmove) {
@@ -137,8 +137,8 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
             // This is the same as a normal search except:
             // - With a "pruneable" flag set (the .nullmove mode)
             // - Depth reduced by 1
-            const nmr_reduction = 1 + @divFloor(depth, 6);
-            return search(game, ctrl, line.Null{}, alpha, beta, ply, depth - nmr_reduction, .nullmove);
+            const nmr_reduction = 1 + depth.divTrunc(6);
+            return search(game, ctrl, line.Null{}, alpha, beta, ply, depth.subInt(nmr_reduction), .nullmove);
         }
     }
 
@@ -159,7 +159,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
         if (game.board.isValid()) {
             // Late Move Pruning
             if (mode != .quiescence and !m.isTactical() and !is_pv_node) {
-                const lmp_threshold = 2 + (depth << 2);
+                const lmp_threshold = 2 + depth.mulTrunc(4);
                 if (!is_in_check and quiets_visited > lmp_threshold) {
                     break;
                 }
@@ -172,29 +172,29 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
                 const a = @max(alpha, best_score);
 
                 // Late move reductions
-                if (mode != .quiescence and quiets_visited > 2 and depth > 2) {
+                if (mode != .quiescence and quiets_visited > 2 and depth.int() > 2) {
                     const log2 = std.math.log2;
                     const l2m = log2(moves_visited);
-                    const l2d = log2(@as(u32, @intCast(depth)));
+                    const l2d = log2(@as(u32, @intCast(depth.int())));
                     var reduction: i32 = @intCast((3 + l2m * l2d) / 4);
                     if (!m.isTactical()) {
                         // reduce quiets more on non-PV nodes
                         reduction += @intFromBool(!is_pv_node);
                     }
-                    const r = std.math.clamp(reduction, 1, depth - 1);
+                    const r = std.math.clamp(reduction, 1, depth.int() - 1);
                     if (r > 1) {
-                        const lmr_score = -try search2(game, ctrl, &child_pv, -a - 1, -a, ply + 1, depth - r, mode);
+                        const lmr_score = -try search2(game, ctrl, &child_pv, -a - 1, -a, ply + 1, depth.subInt(r), mode);
                         if (lmr_score <= a) break :blk lmr_score;
                     }
                 }
 
                 // PVS Scout Search
                 if (mode != .quiescence and moves_visited != 0 and is_pv_node) {
-                    const scout_score = -try search2(game, ctrl, &child_pv, -a - 1, -a, ply + 1, depth - 1, mode);
+                    const scout_score = -try search2(game, ctrl, &child_pv, -a - 1, -a, ply + 1, depth.subInt(1), mode);
                     if (scout_score <= a or scout_score >= beta) break :blk scout_score;
                 }
 
-                break :blk -try search2(game, ctrl, &child_pv, -beta, -a, ply + 1, depth - 1, mode);
+                break :blk -try search2(game, ctrl, &child_pv, -beta, -a, ply + 1, depth.subInt(1), mode);
             };
 
             ctrl.nodeVisited();
@@ -234,7 +234,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
             best_move
         else
             tte.move(),
-        .depth = @intCast(std.math.clamp(depth, 0, 127)),
+        .depth = @intCast(std.math.clamp(depth.int(), 0, 127)),
         .score = best_score,
         .bound = if (best_score >= beta)
             .lower
@@ -247,11 +247,11 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
     return best_score;
 }
 
-fn forDepth(game: *Game, ctrl: anytype, pv: anytype, depth: i32, prev_score: Score) SearchError!Score {
+fn forDepth(game: *Game, ctrl: anytype, pv: anytype, depth: Ply, prev_score: Score) SearchError!Score {
     const min_window = -std.math.maxInt(Score);
     const max_window = std.math.maxInt(Score);
 
-    if (depth > 3) {
+    if (depth.int() > 3) {
         // Aspiration windows
         var score = prev_score;
         var delta: Score = 25;
@@ -275,16 +275,16 @@ fn forDepth(game: *Game, ctrl: anytype, pv: anytype, depth: i32, prev_score: Sco
 
 pub fn go(output: anytype, game: *Game, ctrl: anytype, pv: anytype) !Score {
     // comptime assert(@typeInfo(@TypeOf(ctrl)) == .pointer and @typeInfo(@TypeOf(pv)) == .pointer);
-    var depth: i32 = 1;
+    var depth = Ply.fromInt(1);
     var score: Score = undefined;
     var current_pv = pv.new();
-    while (depth < common.max_search_ply) : (depth += 1) {
+    while (depth.int() < common.max_search_ply) : (depth = depth.addInt(1)) {
         score = forDepth(game, ctrl, &current_pv, depth, score) catch {
-            try output.print("info depth {} score cp {} {} pv {} string [search terminated]\n", .{ depth, score, ctrl, pv });
+            try output.print("info depth {} score cp {} {} pv {} string [search terminated]\n", .{ depth.int(), score, ctrl, pv });
             break;
         };
         pv.copyFrom(&current_pv);
-        try output.print("info depth {} score cp {} {} pv {}\n", .{ depth, score, ctrl, pv });
+        try output.print("info depth {} score cp {} {} pv {}\n", .{ depth.int(), score, ctrl, pv });
         if (ctrl.checkSoftTermination(depth)) break;
     }
     return score;
@@ -301,5 +301,6 @@ const line = @import("line.zig");
 const Game = @import("Game.zig");
 const MoveCode = @import("MoveCode.zig");
 const MoveList = @import("MoveList.zig");
+const Ply = @import("Ply.zig");
 const Score = @import("eval.zig").Score;
 const TT = @import("TT.zig");

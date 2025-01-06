@@ -15,6 +15,7 @@ comptime {
     _ = @import("Move.zig");
     _ = @import("MoveCode.zig");
     _ = @import("MoveList.zig");
+    _ = @import("Ply.zig");
     _ = @import("search.zig");
     _ = @import("State.zig");
     _ = @import("TT.zig");
