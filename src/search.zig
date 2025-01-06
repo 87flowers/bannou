@@ -115,30 +115,33 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
     // Check extension
     if (is_in_check) depth += 1;
 
-    // Reverse futility pruning
-    if (!is_pv_node and !is_in_check and mode != .quiescence and static_eval -| depth * 100 > beta) {
-        return static_eval;
-    }
+    // Pruning
+    if (!is_pv_node and !is_in_check) {
+        // Reverse futility pruning
+        if (mode != .quiescence and static_eval -| depth * 100 > beta) {
+            return static_eval;
+        }
 
-    // Null-move reduction and pruning
-    if (!is_in_check and (mode == .normal or mode == .nullmove) and depth > 2 and !game.prevMove().isNone()) {
-        const old_state = game.moveNull();
-        const nws_reduction = 4 + @divFloor(depth, 6);
-        const null_score = -try search2(game, ctrl, line.Null{}, -beta, -beta +| 1, ply + 1, depth - nws_reduction, .normal);
-        game.unmoveNull(old_state);
-        if (null_score >= beta) {
-            if (mode == .nullmove) {
-                // Failed high twice, actually prune
-                pv.writeEmpty();
-                // Do not return mate scores
-                return if (eval.isMateScore(null_score)) beta else null_score;
+        // Null-move reduction and pruning
+        if ((mode == .normal or mode == .nullmove) and depth > 2 and !game.prevMove().isNone()) {
+            const old_state = game.moveNull();
+            const nws_reduction = 4 + @divFloor(depth, 6);
+            const null_score = -try search2(game, ctrl, line.Null{}, -beta, -beta +| 1, ply + 1, depth - nws_reduction, .normal);
+            game.unmoveNull(old_state);
+            if (null_score >= beta) {
+                if (mode == .nullmove) {
+                    // Failed high twice, actually prune
+                    pv.writeEmpty();
+                    // Do not return mate scores
+                    return if (eval.isMateScore(null_score)) beta else null_score;
+                }
+                // Null-move reduction
+                // This is the same as a normal search except:
+                // - With a "pruneable" flag set (the .nullmove mode)
+                // - Depth reduced by 1
+                const nmr_reduction = 1 + @divFloor(depth, 6);
+                return search(game, ctrl, line.Null{}, alpha, beta, ply, depth - nmr_reduction, .nullmove);
             }
-            // Null-move reduction
-            // This is the same as a normal search except:
-            // - With a "pruneable" flag set (the .nullmove mode)
-            // - Depth reduced by 1
-            const nmr_reduction = 1 + @divFloor(depth, 6);
-            return search(game, ctrl, line.Null{}, alpha, beta, ply, depth - nmr_reduction, .nullmove);
         }
     }
 

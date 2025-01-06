@@ -1,3 +1,5 @@
+const bannou_version = "0.57";
+
 const TimeControl = struct {
     wtime: ?u64 = null,
     btime: ?u64 = null,
@@ -133,13 +135,13 @@ const Uci = struct {
             g.reset();
         } else if (std.mem.eql(u8, command, "uci")) {
             try self.output.print(
-                \\id name Bannou 0.56
+                \\id name Bannou {s}
                 \\id author 87 (87flowers.com)
                 \\option name Hash type spin default {} min 1 max 65535
                 \\option name Threads type spin default 1 min 1 max 1
                 \\uciok
                 \\
-            , .{TT.default_tt_size_mb});
+            , .{ bannou_version, TT.default_tt_size_mb});
         } else if (std.mem.eql(u8, command, "setoption")) {
             const name_str = it.next() orelse return;
             if (!std.mem.eql(u8, name_str, "name"))
