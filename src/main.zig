@@ -137,9 +137,17 @@ const Uci = struct {
                 \\id author 87 (87flowers.com)
                 \\option name Hash type spin default {} min 1 max 65535
                 \\option name Threads type spin default 1 min 1 max 1
-                \\uciok
                 \\
             , .{TT.default_tt_size_mb});
+            {
+                const tune_fields = @typeInfo(search.Params).Struct.fields;
+                inline for (tune_fields) |f| {
+                    const default = @field(search.Params{}, f.name);
+                    const bounds = @field(search.tune_bounds, f.name);
+                    try self.output.print("option name tune_{s} type spin default {} min {} max {}\n", .{ f.name, default, bounds[0], bounds[1] });
+                }
+            }
+            try self.output.print("uciok\n", .{});
         } else if (std.mem.eql(u8, command, "setoption")) {
             const name_str = it.next() orelse return;
             if (!std.mem.eql(u8, name_str, "name"))
@@ -155,6 +163,21 @@ const Uci = struct {
                 if (value.? == 0 or value == null)
                     return self.output.print("info string Error: Invalid value for option Hash\n", .{});
                 try g.tt.setHashSizeMb(value.?);
+            } else if (std.mem.startsWith(u8, name, "tune_")) {
+                const value_str = it.next() orelse return;
+                if (!std.mem.eql(u8, value_str, "value"))
+                    return self.output.print("info string Error: Unexpected token '{s}' in setoption command\n", .{value_str});
+                const tune_fields = @typeInfo(search.Params).Struct.fields;
+                const value: ?i64 = std.fmt.parseInt(i64, it.next() orelse "invalid", 10) catch null;
+                if (value == null)
+                    return self.output.print("info string Error: Invalid value\n", .{});
+                inline for (tune_fields) |f| {
+                    const field = &@field(search.params, f.name);
+                    if (std.mem.eql(u8, name, "tune_" ++ f.name)) {
+                        field.* = @intCast(value.?);
+                        break;
+                    }
+                }
             } else {
                 return self.output.print("info string Error: Unrecognised setting name '{s}' in setoption command\n", .{name});
             }

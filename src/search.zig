@@ -45,6 +45,41 @@ pub fn Control(comptime limit: struct {
     };
 }
 
+pub const Params = struct {
+    iir_depth: i32 = 3,
+    rfp_base: i32 = 0,
+    rfp_mul: i32 = 100,
+    nmr_depth: i32 = 2,
+    nmr_s_base: i32 = 4,
+    nmr_s_div: i32 = 6,
+    nmr_r_base: i32 = 1,
+    nmr_r_div: i32 = 6,
+    lmp_base: i32 = 2,
+    lmp_mul: i32 = 4,
+    lmr_depth: i32 = 2,
+    lmr_threshold: i32 = 2,
+    lmr_base: u32 = 192,
+    lmr_mul: u32 = 64,
+};
+pub const TuneBounds = struct {
+    iir_depth: [2]i32 = .{ 1, 7 },
+    rfp_base: [2]i32 = .{ 0, 300 },
+    rfp_mul: [2]i32 = .{ 20, 200 },
+    nmr_depth: [2]i32 = .{ 1, 7 },
+    nmr_s_base: [2]i32 = .{ 2, 6 },
+    nmr_s_div: [2]i32 = .{ 2, 10 },
+    nmr_r_base: [2]i32 = .{ 1, 6 },
+    nmr_r_div: [2]i32 = .{ 2, 10 },
+    lmp_base: [2]i32 = .{ 1, 10 },
+    lmp_mul: [2]i32 = .{ 1, 10 },
+    lmr_depth: [2]i32 = .{ 1, 6 },
+    lmr_threshold: [2]i32 = .{ 1, 10 },
+    lmr_base: [2]u32 = .{ 1, 512 },
+    lmr_mul: [2]u32 = .{ 1, 512 },
+};
+pub var params = Params{};
+pub const tune_bounds = TuneBounds{};
+
 pub const TimeControl = Control(.{ .time = true });
 pub const DepthControl = Control(.{ .depth = true });
 
@@ -96,7 +131,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
         first_static_eval;
 
     // Internal Iterative Reductions
-    if (mode == .normal and tte.isEmpty() and depth > 3) depth -= 1;
+    if (mode == .normal and tte.isEmpty() and depth > params.iir_depth) depth -= 1;
 
     var best_score: Score = eval.no_moves;
     var best_move: MoveCode = tte.move();
@@ -116,14 +151,14 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
     if (is_in_check) depth += 1;
 
     // Reverse futility pruning
-    if (!is_pv_node and !is_in_check and mode != .quiescence and static_eval -| depth * 100 > beta) {
+    if (!is_pv_node and !is_in_check and mode != .quiescence and static_eval -| (params.rfp_base + depth * params.rfp_mul) > beta) {
         return static_eval;
     }
 
     // Null-move reduction and pruning
-    if (!is_in_check and (mode == .normal or mode == .nullmove) and depth > 2 and !game.prevMove().isNone()) {
+    if (!is_in_check and (mode == .normal or mode == .nullmove) and depth > params.nmr_depth and !game.prevMove().isNone()) {
         const old_state = game.moveNull();
-        const nws_reduction = 4 + @divFloor(depth, 6);
+        const nws_reduction = params.nmr_s_base + @divFloor(depth, params.nmr_s_div);
         const null_score = -try search2(game, ctrl, line.Null{}, -beta, -beta +| 1, ply + 1, depth - nws_reduction, .normal);
         game.unmoveNull(old_state);
         if (null_score >= beta) {
@@ -137,7 +172,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
             // This is the same as a normal search except:
             // - With a "pruneable" flag set (the .nullmove mode)
             // - Depth reduced by 1
-            const nmr_reduction = 1 + @divFloor(depth, 6);
+            const nmr_reduction = params.nmr_r_base + @divFloor(depth, params.nmr_r_div);
             return search(game, ctrl, line.Null{}, alpha, beta, ply, depth - nmr_reduction, .nullmove);
         }
     }
@@ -159,7 +194,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
         if (game.board.isValid()) {
             // Late Move Pruning
             if (mode != .quiescence and !m.isTactical() and !is_pv_node) {
-                const lmp_threshold = 2 + (depth << 2);
+                const lmp_threshold = params.lmp_base + depth * params.lmp_mul;
                 if (!is_in_check and quiets_visited > lmp_threshold) {
                     break;
                 }
@@ -172,11 +207,11 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
                 const a = @max(alpha, best_score);
 
                 // Late move reductions
-                if (mode != .quiescence and quiets_visited > 2 and depth > 2) {
+                if (mode != .quiescence and quiets_visited > params.lmr_threshold and depth > params.lmr_depth) {
                     const log2 = std.math.log2;
                     const l2m = log2(moves_visited);
                     const l2d = log2(@as(u32, @intCast(depth)));
-                    var reduction: i32 = @intCast((3 + l2m * l2d) / 4);
+                    var reduction: i32 = @intCast((params.lmr_base + params.lmr_mul * l2m * l2d) / 256);
                     if (!m.isTactical()) {
                         // reduce quiets more on non-PV nodes
                         reduction += @intFromBool(!is_pv_node);
