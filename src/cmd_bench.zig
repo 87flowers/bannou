@@ -1,13 +1,15 @@
-pub fn run(output: anytype, g: *Game) !void {
+pub fn run(output: anytype, g: *Game, comptime stats: enum { with_stats, no_stats }) !void {
     var time: u64 = 0;
     var nodes: u64 = 0;
+
+    var control = search.Control(.{ .depth = true, .stats = stats == .with_stats }).init(.{ .target_depth = 12 });
 
     for (fens) |fen| {
         g.reset();
         try output.print("benching {s}\n", .{fen});
         g.board = try Board.parse(fen);
 
-        var control = search.DepthControl.init(.{ .target_depth = 12 });
+        control.reset();
         var pv = line.Line{};
         _ = try search.go(output, g, &control, &pv);
 

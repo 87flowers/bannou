@@ -174,7 +174,9 @@ const Uci = struct {
         } else if (std.mem.eql(u8, command, "perft") or std.mem.eql(u8, command, "l.perft")) {
             try self.uciParsePerft(&it);
         } else if (std.mem.eql(u8, command, "bench")) {
-            try cmd_bench.run(self.output, &g);
+            try cmd_bench.run(self.output, &g, .no_stats);
+        } else if (std.mem.eql(u8, command, "stats")) {
+            try cmd_bench.run(self.output, &g, .with_stats);
         } else if (std.mem.eql(u8, command, "bestmove")) {
             try self.uciParseBestMove(&it, .print_only);
         } else if (std.mem.eql(u8, command, "auto")) {
