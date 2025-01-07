@@ -1,48 +1,109 @@
-pub fn Control(comptime limit: struct {
+pub fn Control(comptime config: struct {
     time: bool = false,
     depth: bool = false,
     nodes: bool = false,
+    stats: bool = false,
 }) type {
     return struct {
         timer: std.time.Timer,
         nodes: u64,
-        time_limit: if (limit.time) struct { soft_deadline: u64, hard_deadline: u64 } else void,
-        depth_limit: if (limit.depth) struct { target_depth: i32 } else void,
-        nodes_limit: if (limit.nodes) struct { target_nodes: i32 } else void,
+        time_limit: if (config.time) struct { soft_deadline: u64, hard_deadline: u64 } else void,
+        depth_limit: if (config.depth) struct { target_depth: i32 } else void,
+        nodes_limit: if (config.nodes) struct { target_nodes: i32 } else void,
+        stats: if (config.stats) struct {
+            qnodes: u64 = 0,
+            zw_nodes: u64 = 0,
+            zw_qnodes: u64 = 0,
+            nmr_attempts: u64 = 0,
+            nmr_attempts_while_in_nmr: u64 = 0,
+            nmr_reductions: u64 = 0,
+            nmr_prunes: u64 = 0,
+            rfp_success: u64 = 0,
+            rfp_success_while_in_nmr: u64 = 0,
+        } else void,
 
         pub fn init(args: anytype) @This() {
             return .{
                 .timer = std.time.Timer.start() catch @panic("timer unsupported on platform"),
                 .nodes = 0,
-                .time_limit = if (limit.time) .{ .soft_deadline = args.soft_deadline, .hard_deadline = args.hard_deadline } else {},
-                .depth_limit = if (limit.depth) .{ .target_depth = args.target_depth } else {},
-                .nodes_limit = if (limit.nodes) .{ .target_nodes = args.target_nodes } else {},
+                .time_limit = if (config.time) .{ .soft_deadline = args.soft_deadline, .hard_deadline = args.hard_deadline } else {},
+                .depth_limit = if (config.depth) .{ .target_depth = args.target_depth } else {},
+                .nodes_limit = if (config.nodes) .{ .target_nodes = args.target_nodes } else {},
+                .stats = if (config.stats) .{} else {},
             };
         }
 
-        pub fn nodeVisited(self: *@This()) void {
+        pub fn nodeVisited(self: *@This(), mode: SearchMode, is_pv_node: bool) void {
             self.nodes += 1;
+
+            if (!config.stats) return;
+
+            if (mode == .quiescence) self.stats.qnodes += 1;
+
+            if (!is_pv_node) {
+                self.stats.zw_nodes += 1;
+                if (mode == .quiescence) self.stats.zw_qnodes += 1;
+            }
         }
 
         /// Returns true if we should terminate the search
         pub fn checkSoftTermination(self: *@This(), depth: i32) bool {
-            if (limit.time and self.time_limit.soft_deadline <= self.timer.read()) return true;
-            if (limit.depth and depth >= self.depth_limit.target_depth) return true;
-            if (limit.nodes and self.nodes >= self.nodes_limit.target_nodes) return true;
+            if (config.time and self.time_limit.soft_deadline <= self.timer.read()) return true;
+            if (config.depth and depth >= self.depth_limit.target_depth) return true;
+            if (config.nodes and self.nodes >= self.nodes_limit.target_nodes) return true;
             return false;
         }
 
         /// Raises SearchError.EarlyTermination if we should terminate the search
         pub fn checkHardTermination(self: *@This(), comptime mode: SearchMode, depth: i32) SearchError!void {
-            if (limit.time and mode == .normal and depth > 3 and self.time_limit.hard_deadline <= self.timer.read()) return SearchError.EarlyTermination;
-            if (limit.nodes and self.nodes >= self.nodes_limit.target_nodes) return SearchError.EarlyTermination;
+            if (config.time and mode == .normal and depth > 3 and self.time_limit.hard_deadline <= self.timer.read()) return SearchError.EarlyTermination;
+            if (config.nodes and self.nodes >= self.nodes_limit.target_nodes) return SearchError.EarlyTermination;
+        }
+
+        pub fn trackRfp(self: *@This(), mode: SearchMode) void {
+            if (!config.stats) return;
+            self.stats.rfp_success += 1;
+            if (mode == .nullmove) self.stats.rfp_success_while_in_nmr += 1;
+        }
+
+        pub fn trackNmrAttempt(self: *@This(), mode: SearchMode) void {
+            if (!config.stats) return;
+            self.stats.nmr_attempts += 1;
+            if (mode == .nullmove) self.stats.nmr_attempts_while_in_nmr += 1;
+        }
+
+        pub fn trackNmrSuccess(self: *@This(), mode: SearchMode) void {
+            if (!config.stats) return;
+            if (mode == .nullmove) {
+                self.stats.nmr_prunes += 1;
+            } else {
+                self.stats.nmr_reductions += 1;
+            }
         }
 
         pub fn format(self: *@This(), comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
             const nps = self.nodes * std.time.ns_per_s / self.timer.read();
             try writer.print("time {} nodes {} nps {}", .{ self.timer.read() / std.time.ns_per_ms, self.nodes, nps });
         }
+
+        pub fn printStats(self: *@This(), write: anytype) !void {
+            if (!config.stats) return;
+            try write.print("# nodes:     {}\n", .{self.nodes});
+            try write.print("# qnodes:    {} ({d:.2}%)\n", .{ self.stats.qnodes, percentage(self.stats.qnodes, self.nodes) });
+            try write.print("# zw_nodes:  {} ({d:.2}%)\n", .{ self.stats.zw_nodes, percentage(self.stats.zw_nodes, self.nodes) });
+            try write.print("# zw_qnodes: {} ({d:.2}% q, {d:.2}% zw)\n", .{ self.stats.zw_qnodes, percentage(self.stats.zw_qnodes, self.stats.qnodes), percentage(self.stats.zw_qnodes, self.stats.zw_nodes) });
+            try write.print("# nmr_attempts:              {}\n", .{self.stats.nmr_attempts});
+            try write.print("# nmr_attempts_while_in_nmr: {} ({d:.2}%)\n", .{ self.stats.nmr_attempts_while_in_nmr, percentage(self.stats.nmr_attempts_while_in_nmr, self.stats.nmr_attempts) });
+            try write.print("# nmr_reductions:            {} ({d:.2}%)\n", .{ self.stats.nmr_reductions, percentage(self.stats.nmr_reductions, self.stats.nmr_attempts) });
+            try write.print("# nmr_prunes:                {} ({d:.2}%)\n", .{ self.stats.nmr_prunes, percentage(self.stats.nmr_prunes, self.stats.nmr_attempts) });
+            try write.print("# rfp_success:              {}\n", .{self.stats.rfp_success});
+            try write.print("# rfp_success_while_in_nmr: {} ({d:.2}%)\n", .{ self.stats.rfp_success_while_in_nmr, percentage(self.stats.rfp_success_while_in_nmr, self.stats.rfp_success) });
+        }
     };
+}
+
+fn percentage(numerator: u64, denominator: u64) f32 {
+    return @as(f32, 100) * @as(f32, @floatFromInt(numerator)) / @as(f32, @floatFromInt(denominator));
 }
 
 pub const TimeControl = Control(.{ .time = true });
@@ -119,16 +180,22 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
     if (!is_pv_node and !is_in_check) {
         // Reverse futility pruning
         if (mode != .quiescence and static_eval -| depth * 100 > beta) {
+            ctrl.trackRfp(mode);
             return static_eval;
         }
 
         // Null-move reduction and pruning
         if ((mode == .normal or mode == .nullmove) and depth > 2 and !game.prevMove().isNone()) {
+            ctrl.trackNmrAttempt(mode);
+
             const old_state = game.moveNull();
             const nws_reduction = 4 + @divFloor(depth, 6);
-            const null_score = -try search2(game, ctrl, line.Null{}, -beta, -beta +| 1, ply + 1, depth - nws_reduction, .normal);
+            const null_score = -try search2(game, ctrl, line.Null{}, -beta, -beta +| 1, ply + 1, depth - nws_reduction, mode);
             game.unmoveNull(old_state);
+
             if (null_score >= beta) {
+                ctrl.trackNmrSuccess(mode);
+
                 if (mode == .nullmove) {
                     // Failed high twice, actually prune
                     pv.writeEmpty();
@@ -200,7 +267,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
                 break :blk -try search2(game, ctrl, &child_pv, -beta, -a, ply + 1, depth - 1, mode);
             };
 
-            ctrl.nodeVisited();
+            ctrl.nodeVisited(mode, is_pv_node);
             moves_visited += 1;
             if (mode != .quiescence and !m.isTactical()) {
                 quiets_visited += 1;
@@ -290,6 +357,7 @@ pub fn go(output: anytype, game: *Game, ctrl: anytype, pv: anytype) !Score {
         try output.print("info depth {} score cp {} {} pv {}\n", .{ depth, score, ctrl, pv });
         if (ctrl.checkSoftTermination(depth)) break;
     }
+    try ctrl.printStats(output);
     return score;
 }
 
