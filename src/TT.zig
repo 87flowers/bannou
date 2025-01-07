@@ -15,7 +15,7 @@ pub fn init(allocator: std.mem.Allocator) !TT {
     };
 }
 
-pub fn deinit(self: *TT) !void {
+pub fn deinit(self: *TT) void {
     self.allocator.free(self.buckets);
 }
 
