@@ -48,33 +48,39 @@ fn destBit(self: *const Move) u64 {
     return @as(u64, 1) << self.code.compressedDest();
 }
 
-pub inline fn getNewState(self: *const Move, state: State) State {
+pub inline fn getNewState(self: *const Move, state: State, hash: Hash) struct { State, Hash } {
     const color = Color.fromId(self.id());
     switch (self.mtype) {
-        .normal => return .{
-            .castle = state.castle | self.srcBit() | self.destBit(),
-            .enpassant = self.enpassant,
-            .no_capture_clock = state.no_capture_clock + 1,
-            .ply = state.ply + 1,
-            .hash = state.hash ^
-                zhash.move ^
-                zhash.piece(color, self.srcPtype(), self.code.compressedSrc()) ^
-                zhash.piece(color, self.destPtype(), self.code.compressedDest()) ^
-                zhash.enpassant(state.enpassant) ^
-                zhash.enpassant(self.enpassant) ^
-                zhash.castle(state.castle) ^
-                zhash.castle(state.castle | self.srcBit() | self.destBit()),
+        .normal => {
+            return .{
+                .{
+                    .castle = state.castle | self.srcBit() | self.destBit(),
+                    .enpassant = self.enpassant,
+                    .no_capture_clock = state.no_capture_clock + 1,
+                    .ply = state.ply + 1,
+                },
+                hash ^
+                    zhash.move ^
+                    zhash.piece(color, self.srcPtype(), self.code.compressedSrc()) ^
+                    zhash.piece(color, self.destPtype(), self.code.compressedDest()) ^
+                    zhash.enpassant(state.enpassant) ^
+                    zhash.enpassant(self.enpassant) ^
+                    zhash.castle(state.castle) ^
+                    zhash.castle(state.castle | self.srcBit() | self.destBit()),
+            };
         },
         .castle => {
             const king_src = self.code.compressedSrc();
             const king_dest = self.code.compressedDest();
             const rook_src: u6, const rook_dest: u6 = getCastlingRookMove(king_dest);
             return .{
-                .castle = state.castle | color.frontRankBits(),
-                .enpassant = 0xFF,
-                .no_capture_clock = state.no_capture_clock + 1,
-                .ply = state.ply + 1,
-                .hash = state.hash ^
+                .{
+                    .castle = state.castle | color.frontRankBits(),
+                    .enpassant = 0xFF,
+                    .no_capture_clock = state.no_capture_clock + 1,
+                    .ply = state.ply + 1,
+                },
+                hash ^
                     zhash.move ^
                     zhash.piece(color, .k, king_src) ^
                     zhash.piece(color, .k, king_dest) ^
@@ -85,19 +91,23 @@ pub inline fn getNewState(self: *const Move, state: State) State {
                     zhash.castle(state.castle | color.frontRankBits()),
             };
         },
-        .capture => return .{
-            .castle = state.castle | self.srcBit() | self.destBit(),
-            .enpassant = self.enpassant,
-            .no_capture_clock = 0,
-            .ply = state.ply + 1,
-            .hash = state.hash ^
-                zhash.move ^
-                zhash.piece(color, self.srcPtype(), self.code.compressedSrc()) ^
-                zhash.piece(color, self.destPtype(), self.code.compressedDest()) ^
-                zhash.piece(color.invert(), self.capture_place.ptype, coord.compress(self.capture_coord)) ^
-                zhash.enpassant(state.enpassant) ^
-                zhash.castle(state.castle) ^
-                zhash.castle(state.castle | self.srcBit() | self.destBit()),
+        .capture => {
+            return .{
+                .{
+                    .castle = state.castle | self.srcBit() | self.destBit(),
+                    .enpassant = self.enpassant,
+                    .no_capture_clock = 0,
+                    .ply = state.ply + 1,
+                },
+                hash ^
+                    zhash.move ^
+                    zhash.piece(color, self.srcPtype(), self.code.compressedSrc()) ^
+                    zhash.piece(color, self.destPtype(), self.code.compressedDest()) ^
+                    zhash.piece(color.invert(), self.capture_place.ptype, coord.compress(self.capture_coord)) ^
+                    zhash.enpassant(state.enpassant) ^
+                    zhash.castle(state.castle) ^
+                    zhash.castle(state.castle | self.srcBit() | self.destBit()),
+            };
         },
     }
 }
@@ -115,6 +125,7 @@ const coord = @import("coord.zig");
 const getCastlingRookMove = @import("common.zig").getCastlingRookMove;
 const zhash = @import("zhash.zig");
 const Color = @import("common.zig").Color;
+const Hash = @import("zhash.zig").Hash;
 const MoveCode = @import("MoveCode.zig");
 const PieceType = @import("common.zig").PieceType;
 const Place = @import("Board.zig").Place;

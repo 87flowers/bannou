@@ -3,37 +3,19 @@ where: [32]u8,
 board: [128]Place,
 state: State,
 active_color: Color,
-zhistory: [common.max_game_ply]Hash,
-
-pub fn copyFrom(self: *Board, other: *const Board) void {
-    self.pieces = other.pieces;
-    self.where = other.where;
-    self.board = other.board;
-    self.state = other.state;
-    self.active_color = other.active_color;
-    const zhistory_len = other.state.ply + 1;
-    @memcpy(self.zhistory[0..zhistory_len], other.zhistory[0..zhistory_len]);
-}
 
 pub fn emptyBoard() Board {
-    return comptime blk: {
-        var result: Board = .{
-            .pieces = [1]PieceType{.none} ** 32,
-            .where = undefined,
-            .board = [1]Place{Place.empty} ** 128,
-            .state = .{
-                .castle = 0,
-                .enpassant = 0xff,
-                .no_capture_clock = 0,
-                .ply = 0,
-                .hash = undefined,
-            },
-            .active_color = .white,
-            .zhistory = undefined,
-        };
-        result.state.hash = result.calcHashSlow();
-        result.zhistory[result.state.ply] = result.state.hash;
-        break :blk result;
+    return comptime .{
+        .pieces = [1]PieceType{.none} ** 32,
+        .where = undefined,
+        .board = [1]Place{Place.empty} ** 128,
+        .state = .{
+            .castle = 0,
+            .enpassant = 0xff,
+            .no_capture_clock = 0,
+            .ply = 0,
+        },
+        .active_color = .white,
     };
 }
 
@@ -73,7 +55,6 @@ pub fn defaultBoard() Board {
         result.place(0x1D, .p, 0x65);
         result.place(0x1E, .p, 0x66);
         result.place(0x1F, .p, 0x67);
-        result.zhistory[result.state.ply] = result.state.hash;
         break :blk result;
     };
 }
@@ -83,25 +64,13 @@ pub fn place(self: *Board, id: u5, ptype: PieceType, where: u8) void {
     self.pieces[id] = ptype;
     self.where[id] = where;
     self.board[where] = Place{ .ptype = ptype, .id = id };
-    self.state.hash ^= zhash.piece(Color.fromId(id), ptype, coord.compress(where));
-    self.zhistory[self.state.ply] = self.state.hash;
-    assert(self.state.hash == self.calcHashSlow());
 }
 
-pub fn unplace(self: *Board, id: u5) void {
-    assert(self.pieces[id] != .none and !self.board[self.where[id]].isEmpty());
-    const ptype = self.pieces[id];
-    const where = self.where[id];
-    self.state.hash ^= zhash.piece(Color.fromId(id), ptype, coord.compress(where));
-    self.zhistory[self.state.ply] = self.state.hash;
-    self.pieces[id] = .none;
-    self.where[id] = 0xFF;
-    self.board[where] = Place.empty;
-    assert(self.state.hash == self.calcHashSlow());
-}
-
-pub fn move(self: *Board, m: Move) State {
-    const result = self.state;
+pub fn move(self: *Board, old: *Board, m: Move, old_hash: Hash) Hash {
+    var hash: Hash = undefined;
+    self.pieces = old.pieces;
+    self.where = old.where;
+    self.board = old.board;
     switch (m.mtype) {
         .normal => {
             assert(self.board[m.code.src()].eql(m.src_place));
@@ -109,7 +78,7 @@ pub fn move(self: *Board, m: Move) State {
             self.board[m.code.dest()] = m.dest_place;
             self.where[m.id()] = m.code.dest();
             self.pieces[m.id()] = m.destPtype();
-            self.state = m.getNewState(self.state);
+            self.state, hash = m.getNewState(old.state, old_hash);
         },
         .capture => {
             assert(self.pieces[m.capture_place.id] == m.capture_place.ptype);
@@ -121,7 +90,7 @@ pub fn move(self: *Board, m: Move) State {
             self.board[m.code.dest()] = m.dest_place;
             self.where[m.id()] = m.code.dest();
             self.pieces[m.id()] = m.destPtype();
-            self.state = m.getNewState(self.state);
+            self.state, hash = m.getNewState(old.state, old_hash);
         },
         .castle => {
             assert(m.srcPtype() == .r and m.destPtype() == .r);
@@ -134,263 +103,54 @@ pub fn move(self: *Board, m: Move) State {
             self.board[coord.uncompress(rook_dest)] = Place{ .ptype = .r, .id = m.id() };
             self.where[m.id() & 0x10] = coord.uncompress(king_dest);
             self.where[m.id()] = coord.uncompress(rook_dest);
-            self.state = m.getNewState(self.state);
+            self.state, hash = m.getNewState(old.state, old_hash);
         },
     }
-    self.active_color = self.active_color.invert();
-    self.zhistory[self.state.ply] = self.state.hash;
-    assert(self.state.hash == self.calcHashSlow());
-    return result;
+    self.active_color = old.active_color.invert();
+    return hash;
 }
 
-pub fn makeMoveByCode(self: *Board, code: MoveCode) bool {
-    const p = self.board[code.src()];
-    if (p.isEmpty()) return false;
+pub fn makeMoveByCode(self: *Board, old: *Board, code: MoveCode, old_hash: Hash) ?Hash {
+    const p = old.board[code.src()];
+    if (p.isEmpty()) return null;
 
     var moves = MoveList{};
-    moves.generateMovesForPiece(self, .any, p.id);
+    moves.generateMovesForPiece(old, .any, p.id);
     for (0..moves.size) |i| {
         const m = moves.moves[i];
         if (std.meta.eql(m.code, code)) {
-            _ = self.move(m);
-            return true;
+            return self.move(old, m, old_hash);
         }
     }
-    return false;
+    return null;
 }
 
-pub fn makeMoveByPgnCode(self: *Board, pgn_arg: []const u8) bool {
-    if (pgn_arg.len < 2) return false;
-    var pgn = switch (pgn_arg[pgn_arg.len - 1]) {
-        '#', '+' => pgn_arg[0 .. pgn_arg.len - 1],
-        else => pgn_arg,
-    };
-
-    if (std.mem.eql(u8, pgn, "O-O")) {
-        if (self.board[self.active_color.backRank() | 4].ptype != .k) return false;
-        return self.makeMoveByCode(MoveCode.castle_kingside(self.active_color));
-    }
-
-    if (std.mem.eql(u8, pgn, "O-O-O")) {
-        if (self.board[self.active_color.backRank() | 4].ptype != .k) return false;
-        return self.makeMoveByCode(MoveCode.castle_queenside(self.active_color));
-    }
-
-    var promotion_ptype: PieceType = .none;
-    if (pgn.len >= 4 and pgn[pgn.len - 2] == '=') {
-        promotion_ptype = PieceType.parseUncolored(pgn[pgn.len - 1]) catch return false;
-        pgn = pgn[0 .. pgn.len - 2];
-    }
-
-    if (pgn.len < 2) return false;
-    const is_capture = pgn.len >= 3 and pgn[pgn.len - 3] == 'x';
-    const dest: u8 = coord.fromString(pgn[pgn.len - 2 ..][0..2].*) catch return false;
-
-    var src_ptype: PieceType = .none;
-    var src: u8 = 0;
-    var src_mask: u8 = 0;
-    switch (pgn.len - @intFromBool(is_capture)) {
-        2 => {
-            // e.g. e4
-            if (is_capture) return false;
-            src_ptype = .p;
-        },
-        3 => {
-            if (pgn[0] >= 'a' and pgn[0] <= 'h') {
-                // e.g. axb3
-                if (!is_capture) return false;
-                src_ptype = .p;
-                src = coord.fileFromChar(pgn[0]) catch unreachable;
-                src_mask = 0x07;
-            } else {
-                // e.g. Bb3, Bxb3
-                src_ptype = PieceType.parseUncolored(pgn[0]) catch return false;
-            }
-        },
-        4 => {
-            // e.g. Qhxa3, Q3xb7, Qba4, Q6a3
-            src_ptype = PieceType.parseUncolored(pgn[0]) catch return false;
-            if (coord.fileFromChar(pgn[1]) catch null) |file| {
-                src = file;
-                src_mask = 0x07;
-            } else if (coord.rankFromChar(pgn[1]) catch null) |rank| {
-                src = rank;
-                src_mask = 0x70;
-            } else {
-                return false;
-            }
-        },
-        5 => {
-            // e.g. Qa1b2, Qa1xb2
-            src_ptype = PieceType.parseUncolored(pgn[0]) catch return false;
-            src = coord.fromString(pgn[1..3].*) catch return false;
-            src_mask = 0xFF;
-        },
-        else => return false,
-    }
-
-    var candidate: ?Move = null;
-    const id_base = self.active_color.idBase();
-    for (0..16) |id_index| {
-        const id: u5 = @intCast(id_base + id_index);
-        if (self.pieces[id] != src_ptype) continue;
-        if (self.where[id] & src_mask != src) continue;
-
-        var moves = MoveList{};
-        moves.generateMovesForPiece(self, .any, id);
-        for (0..moves.size) |i| {
-            const m = moves.moves[i];
-            if (m.isCapture() == is_capture and m.code.dest() == dest and m.code.promotion() == promotion_ptype) {
-                const old_state = self.move(m);
-                defer self.unmove(m, old_state);
-                if (!self.isValid()) continue;
-                if (candidate != null) return false;
-                candidate = m;
-            }
-        }
-    }
-    if (candidate) |m| {
-        _ = self.move(m);
-        return true;
-    }
-    return false;
-}
-
-test {
-    var board = Board.defaultBoard();
-    const moves = [_][]const u8{
-        "e4",   "c5",
-        "Nf3",  "e6",
-        "d4",   "cxd4",
-        "Nxd4", "Nc6",
-        "Nb5",  "d6",
-        "c4",   "Nf6",
-        "N1c3", "a6",
-        "Na3",  "d5",
-        "cxd5", "exd5",
-        "exd5", "Nb4",
-        "Be2",  "Bc5",
-        "O-O",  "O-O",
-        "Bf3",  "Bf5",
-        "Bg5",  "Re8",
-        "Qd2",  "b5",
-        "Rad1", "Nd3",
-        "Nab1", "h6",
-        "Bh4",  "b4",
-        "Na4",  "Bd6",
-        "Bg3",  "Rc8",
-        "b3",   "g5",
-        "Bxd6", "Qxd6",
-        "g3",   "Nd7",
-        "Bg2",  "Qf6",
-        "a3",   "a5",
-        "axb4", "axb4",
-        "Qa2",  "Bg6",
-        "d6",   "g4",
-        "Qd2",  "Kg7",
-        "f3",   "Qxd6",
-        "fxg4", "Qd4+",
-        "Kh1",  "Nf6",
-        "Rf4",  "Ne4",
-        "Qxd3", "Nf2+",
-        "Rxf2", "Bxd3",
-        "Rfd2", "Qe3",
-        "Rxd3", "Rc1",
-        "Nb2",  "Qf2",
-        "Nd2",  "Rxd1+",
-        "Nxd1", "Re1+",
-    };
-    for (moves) |m| {
-        try std.testing.expect(board.makeMoveByPgnCode(m));
-    }
-    var tmp: [50]u8 = undefined;
-    const fen = try std.fmt.bufPrint(&tmp, "{}", .{board});
-    try std.testing.expectEqualStrings("8/5pk1/7p/8/1p4P1/1P1R2P1/3N1qBP/3Nr2K w - - 1 41", fen);
-}
-
-test {
-    const cases = [_]struct { []const u8, []const u8, []const u8 }{
-        .{ "7r/3r1p1p/6p1/1p6/2B5/5PP1/1Q5P/1K1k4 b - - 0 38", "bxc4", "7r/3r1p1p/6p1/8/2p5/5PP1/1Q5P/1K1k4 w - - 0 39" },
-        .{ "2n1r1n1/1p1k1p2/6pp/R2pP3/3P4/8/5PPP/2R3K1 b - - 0 30", "Nge7", "2n1r3/1p1knp2/6pp/R2pP3/3P4/8/5PPP/2R3K1 w - - 1 31" },
-        .{ "8/5p2/1kn1r1n1/1p1pP3/6K1/8/4R3/5R2 b - - 9 60", "Ngxe5+", "8/5p2/1kn1r3/1p1pn3/6K1/8/4R3/5R2 w - - 0 61" },
-        .{ "r3k2r/pp1bnpbp/1q3np1/3p4/3N1P2/1PP1Q2P/P1B3P1/RNB1K2R b KQkq - 5 15", "Ng8", "r3k1nr/pp1bnpbp/1q4p1/3p4/3N1P2/1PP1Q2P/P1B3P1/RNB1K2R w KQkq - 6 16" },
-    };
-    for (cases) |case| {
-        const before, const pgncode, const after = case;
-        var board = try Board.parse(before);
-        try std.testing.expect(board.makeMoveByPgnCode(pgncode));
-        var tmp: [128]u8 = undefined;
-        const fen = try std.fmt.bufPrint(&tmp, "{}", .{board});
-        try std.testing.expectEqualStrings(after, fen);
-    }
-}
-
-pub fn unmove(self: *Board, m: Move, old_state: State) void {
-    switch (m.mtype) {
-        .normal => {
-            self.board[m.code.dest()] = Place.empty;
-            self.board[m.code.src()] = m.src_place;
-            self.where[m.id()] = m.code.src();
-            self.pieces[m.id()] = m.srcPtype();
-        },
-        .capture => {
-            self.board[m.code.dest()] = Place.empty;
-            self.pieces[m.capture_place.id] = m.capture_place.ptype;
-            self.board[m.capture_coord] = m.capture_place;
-            self.board[m.code.src()] = m.src_place;
-            self.where[m.id()] = m.code.src();
-            self.pieces[m.id()] = m.srcPtype();
-        },
-        .castle => {
-            assert(m.srcPtype() == .r and m.destPtype() == .r);
-            const king_src = m.code.compressedSrc();
-            const king_dest = m.code.compressedDest();
-            const rook_src: u6, const rook_dest: u6 = getCastlingRookMove(king_dest);
-            self.board[coord.uncompress(king_dest)] = Place.empty;
-            self.board[coord.uncompress(rook_dest)] = Place.empty;
-            self.board[coord.uncompress(king_src)] = Place{ .ptype = .k, .id = m.id() & 0x10 };
-            self.board[coord.uncompress(rook_src)] = Place{ .ptype = .r, .id = m.id() };
-            self.where[m.id() & 0x10] = coord.uncompress(king_src);
-            self.where[m.id()] = coord.uncompress(rook_src);
-        },
-    }
-    self.state = old_state;
-    self.active_color = self.active_color.invert();
-    assert(self.zhistory[self.state.ply] == self.state.hash);
-}
-
-pub fn moveNull(self: *Board) State {
-    const result = self.state;
-    self.state.hash ^= zhash.move ^ zhash.enpassant(self.state.enpassant);
+pub fn moveNull(self: *Board, old: *Board, old_hash: Hash) Hash {
+    self.pieces = old.pieces;
+    self.where = old.where;
+    self.board = old.board;
+    self.state.castle = old.state.castle;
     self.state.enpassant = 0xFF;
     self.state.no_capture_clock = 0;
-    self.state.ply += 1;
-    self.active_color = self.active_color.invert();
-    self.zhistory[self.state.ply] = self.state.hash;
-    assert(self.state.hash == self.calcHashSlow());
-    return result;
-}
-
-pub fn unmoveNull(self: *Board, old_state: State) void {
-    self.state = old_state;
-    self.active_color = self.active_color.invert();
-    assert(self.zhistory[self.state.ply] == self.state.hash);
+    self.state.ply = old.state.ply + 1;
+    self.active_color = old.active_color.invert();
+    return old_hash ^ zhash.move ^ zhash.enpassant(old.state.enpassant);
 }
 
 /// This MUST be checked after making a move on the board.
-pub fn isValid(self: *Board) bool {
+pub fn isValid(self: *const Board) bool {
     // Ensure player that just made a move is not in check!
     const move_color = self.active_color.invert();
     const king_id = move_color.idBase();
     return !self.isAttacked(self.where[king_id], move_color);
 }
 
-pub fn isInCheck(self: *Board) bool {
+pub fn isInCheck(self: *const Board) bool {
     const king_id = self.active_color.idBase();
     return self.isAttacked(self.where[king_id], self.active_color);
 }
 
-pub fn isAttacked(self: *Board, target: u8, friendly: Color) bool {
+pub fn isAttacked(self: *const Board, target: u8, friendly: Color) bool {
     const enemy_color = friendly.invert();
     const id_base = enemy_color.idBase();
     for (0..16) |id_index| {
@@ -409,7 +169,7 @@ pub fn isAttacked(self: *Board, target: u8, friendly: Color) bool {
     return false;
 }
 
-fn isVisibleBySlider(self: *Board, comptime dirs: anytype, src: u8, dest: u8) bool {
+fn isVisibleBySlider(self: *const Board, comptime dirs: anytype, src: u8, dest: u8) bool {
     const lut = comptime blk: {
         var l = [1]u8{0} ** 256;
         for (dirs) |dir| {
@@ -442,21 +202,7 @@ pub fn calcHashSlow(self: *const Board) Hash {
     return result;
 }
 
-pub fn isRepeatedPosition(self: *Board) bool {
-    var i: u16 = self.state.ply - self.state.no_capture_clock;
-    i += @intFromEnum(self.active_color.invert());
-    i &= ~@as(u16, 1);
-    i += @intFromEnum(self.active_color);
-
-    while (i + 4 <= self.state.ply) : (i += 2) {
-        if (self.zhistory[i] == self.state.hash) {
-            return true;
-        }
-    }
-    return false;
-}
-
-pub fn is50MoveExpired(self: *Board) bool {
+pub fn is50MoveExpired(self: *const Board) bool {
     // TODO: detect if this move is checkmate
     return self.state.no_capture_clock >= 100;
 }
@@ -532,8 +278,6 @@ pub fn parseParts(board_str: []const u8, color_str: []const u8, castle_str: []co
     result.active_color = try Color.parse(color_str[0]);
 
     result.state = try State.parseParts(result.active_color, castle_str, enpassant_str, no_capture_clock_str, ply_str);
-    result.state.hash = result.calcHashSlow();
-    result.zhistory[result.state.ply] = result.state.hash;
 
     return result;
 }

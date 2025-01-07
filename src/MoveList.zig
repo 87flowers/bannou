@@ -6,7 +6,7 @@ pub const MoveGeneratorMode = enum {
     captures_only,
 };
 
-pub fn generateMoves(self: *MoveList, board: *Board, comptime mode: MoveGeneratorMode) void {
+pub fn generateMoves(self: *MoveList, board: *const Board, comptime mode: MoveGeneratorMode) void {
     const id_base = board.active_color.idBase();
     for (0..16) |id_index| {
         const id: u5 = @intCast(id_base + id_index);
@@ -14,7 +14,7 @@ pub fn generateMoves(self: *MoveList, board: *Board, comptime mode: MoveGenerato
     }
 }
 
-pub fn generateMovesForPiece(self: *MoveList, board: *Board, comptime mode: MoveGeneratorMode, id: u5) void {
+pub fn generateMovesForPiece(self: *MoveList, board: *const Board, comptime mode: MoveGeneratorMode, id: u5) void {
     const src = board.where[id];
     switch (board.pieces[id]) {
         .none => {},
@@ -93,7 +93,7 @@ pub fn sortInOrder(self: *MoveList, order: []i32) void {
     std.sort.heapContext(0, self.size, Context{ .ml = self, .order = order });
 }
 
-fn generateSliderMoves(self: *MoveList, board: *Board, comptime mode: MoveGeneratorMode, ptype: PieceType, id: u5, src: u8, dirs: anytype) void {
+fn generateSliderMoves(self: *MoveList, board: *const Board, comptime mode: MoveGeneratorMode, ptype: PieceType, id: u5, src: u8, dirs: anytype) void {
     assert(board.where[id] == src and board.board[src].eql(.{ .ptype = ptype, .id = id }));
     for (dirs) |dir| {
         var dest: u8 = src +% dir;
@@ -109,7 +109,7 @@ fn generateSliderMoves(self: *MoveList, board: *Board, comptime mode: MoveGenera
     }
 }
 
-fn generateStepperMoves(self: *MoveList, board: *Board, comptime mode: MoveGeneratorMode, ptype: PieceType, id: u5, src: u8, dirs: anytype) void {
+fn generateStepperMoves(self: *MoveList, board: *const Board, comptime mode: MoveGeneratorMode, ptype: PieceType, id: u5, src: u8, dirs: anytype) void {
     assert(board.where[id] == src and board.board[src].eql(.{ .ptype = ptype, .id = id }));
     for (dirs) |dir| {
         const dest = src +% dir;
@@ -123,7 +123,7 @@ fn generateStepperMoves(self: *MoveList, board: *Board, comptime mode: MoveGener
     }
 }
 
-fn generatePawnMovesMayPromote(self: *MoveList, board: *Board, comptime mode: MoveGeneratorMode, isrc: u8, id: u5, src: u8, dest: u8, comptime has_capture: MoveList.HasCapture) void {
+fn generatePawnMovesMayPromote(self: *MoveList, board: *const Board, comptime mode: MoveGeneratorMode, isrc: u8, id: u5, src: u8, dest: u8, comptime has_capture: MoveList.HasCapture) void {
     assert(board.where[id] == src and board.board[src].eql(.{ .ptype = .p, .id = id }));
     if ((isrc & 0xF0) == 0x60) {
         // promotion

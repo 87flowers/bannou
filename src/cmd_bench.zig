@@ -7,7 +7,7 @@ pub fn run(output: anytype, g: *Game, comptime stats: enum { with_stats, no_stat
     for (fens) |fen| {
         g.reset();
         try output.print("benching {s}\n", .{fen});
-        g.board = try Board.parse(fen);
+        g.setPosition(try Board.parse(fen));
 
         control.reset();
         var pv = line.Line{};

@@ -6,8 +6,6 @@ enpassant: u8,
 no_capture_clock: u8,
 /// current move number (in half-moves)
 ply: u16,
-/// Zorbrist hash for position
-hash: Hash,
 
 pub fn format(self: *const State, writer: anytype, board: *const Board) !void {
     // castling state
@@ -44,7 +42,6 @@ pub fn parseParts(active_color: Color, castle_str: []const u8, enpassant_str: []
         .enpassant = 0xFF,
         .no_capture_clock = undefined,
         .ply = undefined,
-        .hash = undefined,
     };
     if (!std.mem.eql(u8, castle_str, "-")) {
         var i: usize = 0;
@@ -76,5 +73,4 @@ const castle_mask = @import("castle_mask.zig");
 const coord = @import("coord.zig");
 const Board = @import("Board.zig");
 const Color = @import("common.zig").Color;
-const Hash = @import("zhash.zig").Hash;
 const ParseError = @import("common.zig").ParseError;

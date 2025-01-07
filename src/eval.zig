@@ -122,12 +122,12 @@ const k_eg = [_]i16 {
 // zig fmt: on
 
 pub fn eval(game: *const Game) i14 {
-    const mg_phase = phase(&game.board);
+    const mg_phase = phase(game.board());
     const eg_phase = 24 - mg_phase;
     var score: i32 = 0;
     for (0..16) |id| {
-        const where = coord.compress(game.board.where[id]);
-        score += switch (game.board.pieces[id]) {
+        const where = coord.compress(game.board().where[id]);
+        score += switch (game.board().pieces[id]) {
             .none => 0,
             .k => k_mg[where] * mg_phase + k_eg[where] * eg_phase,
             .q => q_mg[where] * mg_phase + q_eg[where] * eg_phase,
@@ -138,8 +138,8 @@ pub fn eval(game: *const Game) i14 {
         };
     }
     for (16..32) |id| {
-        const where = coord.compress(game.board.where[id] ^ 0x70);
-        score -= switch (game.board.pieces[id]) {
+        const where = coord.compress(game.board().where[id] ^ 0x70);
+        score -= switch (game.board().pieces[id]) {
             .none => 0,
             .k => k_mg[where] * mg_phase + k_eg[where] * eg_phase,
             .q => q_mg[where] * mg_phase + q_eg[where] * eg_phase,
@@ -150,7 +150,7 @@ pub fn eval(game: *const Game) i14 {
         };
     }
     score = @divTrunc(score, 24);
-    return clampScore(switch (game.board.active_color) {
+    return clampScore(switch (game.board().active_color) {
         .white => score,
         .black => -score,
     });

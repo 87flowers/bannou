@@ -188,7 +188,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
         }
     }
 
-    const is_in_check = game.board.isInCheck();
+    const is_in_check = game.board().isInCheck();
 
     // Check extension
     if (is_in_check) depth += 1;
@@ -205,10 +205,10 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
         if ((mode == .normal or mode == .nullmove) and depth > 2 and !game.prevMove().isNone()) {
             ctrl.trackNmrAttempt(mode);
 
-            const old_state = game.moveNull();
+            game.moveNull();
             const nws_reduction = 4 + @divFloor(depth, 6);
             const null_score = -try search2(game, ctrl, line.Null{}, -beta, -beta +| 1, ply + 1, depth - nws_reduction, .normal);
-            game.unmoveNull(old_state);
+            game.unmove();
 
             if (null_score >= beta) {
                 ctrl.trackNmrSuccess(mode);
@@ -231,8 +231,8 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
 
     var moves = MoveList{};
     switch (mode) {
-        .firstply, .normal, .nullmove => moves.generateMoves(&game.board, .any),
-        .quiescence => moves.generateMoves(&game.board, .captures_only),
+        .firstply, .normal, .nullmove => moves.generateMoves(game.board(), .any),
+        .quiescence => moves.generateMoves(game.board(), .captures_only),
     }
     game.sortMoves(&moves, best_move);
 
@@ -241,9 +241,9 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
     var quiets_visited: usize = 0;
     for (0..moves.size) |i| {
         const m = moves.moves[i];
-        const old_state = game.move(m);
-        defer game.unmove(m, old_state);
-        if (game.board.isValid()) {
+        game.move(m);
+        defer game.unmove();
+        if (game.board().isValid()) {
             // Late Move Pruning
             if (mode != .quiescence and !m.isTactical() and !is_pv_node) {
                 const lmp_threshold = 2 + (depth << 2);
@@ -254,7 +254,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
 
             var child_pv = pv.newChild();
             const child_score = blk: {
-                if (game.board.isRepeatedPosition() or game.board.is50MoveExpired()) break :blk 0;
+                if (game.isRepeatedPosition() or game.board().is50MoveExpired()) break :blk 0;
 
                 const a = @max(alpha, best_score);
 

@@ -1,34 +1,34 @@
-fn core(board: *Board, depth: usize) usize {
+fn core(g: *Game, depth: usize) usize {
     if (depth == 0) return 1;
     var result: usize = 0;
     var moves = MoveList{};
-    moves.generateMoves(board, .any);
+    moves.generateMoves(g.board(), .any);
     for (0..moves.size) |i| {
         const m = moves.moves[i];
-        const old_state = board.move(m);
-        if (board.isValid()) {
-            result += core(board, depth - 1);
+        g.move(m);
+        if (g.board().isValid()) {
+            result += core(g, depth - 1);
         }
-        board.unmove(m, old_state);
+        g.unmove();
     }
     return result;
 }
 
-pub fn perft(output: anytype, board: *Board, depth: usize) !void {
+pub fn perft(output: anytype, g: *Game, depth: usize) !void {
     if (depth == 0) return;
     var result: usize = 0;
     var moves = MoveList{};
     var timer = try std.time.Timer.start();
-    moves.generateMoves(board, .any);
+    moves.generateMoves(g.board(), .any);
     for (0..moves.size) |i| {
         const m = moves.moves[i];
-        const old_state = board.move(m);
-        if (board.isValid()) {
-            const p = core(board, depth - 1);
+        g.move(m);
+        if (g.board().isValid()) {
+            const p = core(g, depth - 1);
             result += p;
             try output.print("{}: {}\n", .{ m, p });
         }
-        board.unmove(m, old_state);
+        g.unmove();
     }
     const elapsed: f64 = @floatFromInt(timer.read());
     try output.print("Nodes searched (depth {}): {}\n", .{ depth, result });
@@ -37,4 +37,5 @@ pub fn perft(output: anytype, board: *Board, depth: usize) !void {
 
 const std = @import("std");
 const Board = @import("Board.zig");
+const Game = @import("Game.zig");
 const MoveList = @import("MoveList.zig");

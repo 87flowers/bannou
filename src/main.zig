@@ -17,7 +17,7 @@ const Uci = struct {
         const margin = 100;
         const movestogo = tc.movestogo orelse 30;
         assert(tc.wtime != null and tc.btime != null);
-        const time_remaining = switch (g.board.active_color) {
+        const time_remaining = switch (g.board().active_color) {
             .white => tc.wtime.?,
             .black => tc.btime.?,
         };
@@ -58,12 +58,9 @@ const Uci = struct {
     }
 
     fn uciParseUndo(self: *Uci, it: *Iterator) !void {
-        const count = std.fmt.parseUnsigned(usize, it.next() orelse "1", 10) catch
+        var count = std.fmt.parseUnsigned(usize, it.next() orelse "1", 10) catch
             return self.output.print("info string Error: Invalid argument to undo\n", .{});
-
-        // Replay up to current position
-        if (!g.undoAndReplay(count))
-            return self.output.print("info string Error: Undo count too large\n", .{});
+        while (count > 0) : (count -= 1) g.unmove();
     }
 
     fn uciParseMoveSequence(self: *Uci, it: *Iterator) !void {
@@ -71,7 +68,7 @@ const Uci = struct {
             const code = MoveCode.parse(move_str) catch
                 return self.output.print("info string Error: Invalid movecode '{s}'\n", .{move_str});
             if (!g.makeMoveByCode(code)) {
-                try self.output.print("info string Error: Illegal move '{}' in position {}\n", .{ code, g.board });
+                try self.output.print("info string Error: Illegal move '{}' in position {}\n", .{ code, g.board() });
                 return;
             }
         }
@@ -103,7 +100,7 @@ const Uci = struct {
     fn uciParsePerft(self: *Uci, it: *Iterator) !void {
         const depth = std.fmt.parseUnsigned(usize, it.next() orelse "1", 10) catch
             return self.output.print("info string Error: Invalid argument to l.perft\n", .{});
-        try cmd_perft.perft(self.output, &g.board, depth);
+        try cmd_perft.perft(self.output, &g, depth);
     }
 
     fn uciParseBestMove(self: *Uci, it: *Iterator, make_move: enum { make_move, print_only }) !void {
@@ -141,7 +138,7 @@ const Uci = struct {
                 \\option name Threads type spin default 1 min 1 max 1
                 \\uciok
                 \\
-            , .{ bannou_version, TT.default_tt_size_mb});
+            , .{ bannou_version, TT.default_tt_size_mb });
         } else if (std.mem.eql(u8, command, "setoption")) {
             const name_str = it.next() orelse return;
             if (!std.mem.eql(u8, name_str, "name"))
@@ -166,7 +163,7 @@ const Uci = struct {
         } else if (std.mem.eql(u8, command, "quit")) {
             std.process.exit(0);
         } else if (std.mem.eql(u8, command, "d")) {
-            try g.board.debugPrint(self.output);
+            try g.board().debugPrint(self.output);
         } else if (std.mem.eql(u8, command, "move")) {
             try self.uciParseMoveSequence(&it);
         } else if (std.mem.eql(u8, command, "undo")) {
@@ -184,7 +181,7 @@ const Uci = struct {
         } else if (std.mem.eql(u8, command, "eval")) {
             try self.output.print("score cp {}\n", .{eval.eval(&g)});
         } else if (std.mem.eql(u8, command, "history")) {
-            for (g.board.zhistory[0 .. g.board.state.ply + 1], 0..) |h, i| {
+            for (g.hash_history[0 .. g.move_history_len + 1], 0..) |h, i| {
                 try self.output.print("{}: {X}\n", .{ i, h });
             }
         } else {
