@@ -11,7 +11,7 @@ const TimeControl = struct {
 var g: Game = undefined;
 
 const Uci = struct {
-    output: std.fs.File.Writer,
+    output: std.io.BufferedWriter(4096, std.fs.File.Writer).Writer,
 
     fn go(self: *Uci, tc: TimeControl) !void {
         const margin = 100;
@@ -201,7 +201,8 @@ pub fn main() !void {
     g = try Game.init(allocator);
     defer g.deinit();
 
-    var uci = Uci{ .output = std.io.getStdOut().writer() };
+    var output = std.io.bufferedWriter(std.io.getStdOut().writer());
+    var uci = Uci{ .output = output.writer() };
 
     // Handle command line arguments
     {
@@ -214,6 +215,7 @@ pub fn main() !void {
         while (args.next()) |arg| {
             has_arguments = true;
             try uci.uciParseCommand(arg);
+            try output.flush();
         }
         if (has_arguments) return;
     }
@@ -224,6 +226,7 @@ pub fn main() !void {
     var buffer: [buffer_size]u8 = undefined;
     while (try input.readUntilDelimiterOrEof(&buffer, '\n')) |input_line| {
         try uci.uciParseCommand(input_line);
+        try output.flush();
     }
 }
 
