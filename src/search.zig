@@ -124,21 +124,22 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
 
         // Null-move reduction and pruning
         if ((mode == .normal or mode == .nullmove) and depth > 2 and !game.prevMove().isNone()) {
+            const advantage = @max(0, static_eval - beta);
+            const nws_reduction: i32 = 4 + @divFloor(depth, 6) + @max(0, log2(advantage) - 6);
+
             const old_state = game.moveNull();
-            const nws_reduction = 4 + @divFloor(depth, 6);
             const null_score = -try search2(game, ctrl, line.Null{}, -beta, -beta +| 1, ply + 1, depth - nws_reduction, .normal);
             game.unmoveNull(old_state);
+
             if (null_score >= beta) {
                 if (mode == .nullmove) {
-                    // Failed high twice, actually prune
+                    // Null-move pruning - Failed high twice, actually prune
                     pv.writeEmpty();
                     // Do not return mate scores
                     return if (eval.isMateScore(null_score)) beta else null_score;
                 }
+
                 // Null-move reduction
-                // This is the same as a normal search except:
-                // - With a "pruneable" flag set (the .nullmove mode)
-                // - Depth reduced by 1
                 const nmr_reduction = 1 + @divFloor(depth, 6);
                 return search(game, ctrl, line.Null{}, alpha, beta, ply, depth - nmr_reduction, .nullmove);
             }
@@ -176,10 +177,9 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
 
                 // Late move reductions
                 if (mode != .quiescence and quiets_visited > 2 and depth > 2) {
-                    const log2 = std.math.log2;
                     const l2m = log2(moves_visited);
-                    const l2d = log2(@as(u32, @intCast(depth)));
-                    var reduction: i32 = @intCast((3 + l2m * l2d) / 4);
+                    const l2d = log2(depth);
+                    var reduction = @divFloor(3 + l2m * l2d, 4);
                     if (!m.isTactical()) {
                         // reduce quiets more on non-PV nodes
                         reduction += @intFromBool(!is_pv_node);
@@ -291,6 +291,13 @@ pub fn go(output: anytype, game: *Game, ctrl: anytype, pv: anytype) !Score {
         if (ctrl.checkSoftTermination(depth)) break;
     }
     return score;
+}
+
+inline fn log2(x: anytype) i32 {
+    return @intCast(switch (@typeInfo(@TypeOf(x)).Int.signedness) {
+        .signed => std.math.log2_int(u32, @intCast(@max(1, x))),
+        .unsigned => std.math.log2_int(usize, @max(1, x)),
+    });
 }
 
 const SearchError = error{EarlyTermination};
