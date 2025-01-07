@@ -51,53 +51,57 @@ fn destBit(self: *const Move) u64 {
 pub inline fn getNewState(self: *const Move, state: State) State {
     const color = Color.fromId(self.id());
     switch (self.mtype) {
-        .normal => return .{
-            .castle = state.castle | self.srcBit() | self.destBit(),
-            .enpassant = self.enpassant,
-            .no_capture_clock = state.no_capture_clock + 1,
-            .ply = state.ply + 1,
-            .hash = state.hash ^
+        .normal => { 
+            const castle = state.castle | self.srcBit() | self.destBit();
+            const base_hash = state.base_hash ^
                 zhash.move ^
                 zhash.piece(color, self.srcPtype(), self.code.compressedSrc()) ^
-                zhash.piece(color, self.destPtype(), self.code.compressedDest()) ^
-                zhash.enpassant(state.enpassant) ^
-                zhash.enpassant(self.enpassant) ^
-                zhash.castle(state.castle) ^
-                zhash.castle(state.castle | self.srcBit() | self.destBit()),
+                zhash.piece(color, self.destPtype(), self.code.compressedDest());
+            return .{
+                .castle = castle,
+                .enpassant = self.enpassant,
+                .no_capture_clock = state.no_capture_clock + 1,
+                .ply = state.ply + 1,
+                .base_hash = base_hash,
+                .hash = base_hash ^ zhash.enpassant(self.enpassant) ^ zhash.castle(castle),
+            };
         },
         .castle => {
             const king_src = self.code.compressedSrc();
             const king_dest = self.code.compressedDest();
             const rook_src: u6, const rook_dest: u6 = getCastlingRookMove(king_dest);
-            return .{
-                .castle = state.castle | color.frontRankBits(),
-                .enpassant = 0xFF,
-                .no_capture_clock = state.no_capture_clock + 1,
-                .ply = state.ply + 1,
-                .hash = state.hash ^
+
+            const castle = state.castle | color.frontRankBits();
+            const base_hash = state.base_hash ^
                     zhash.move ^
                     zhash.piece(color, .k, king_src) ^
                     zhash.piece(color, .k, king_dest) ^
                     zhash.piece(color, .r, rook_src) ^
-                    zhash.piece(color, .r, rook_dest) ^
-                    zhash.enpassant(state.enpassant) ^
-                    zhash.castle(state.castle) ^
-                    zhash.castle(state.castle | color.frontRankBits()),
+                    zhash.piece(color, .r, rook_dest);
+            return .{
+                .castle = castle,
+                .enpassant = 0xFF,
+                .no_capture_clock = state.no_capture_clock + 1,
+                .ply = state.ply + 1,
+                .base_hash = base_hash,
+                .hash = base_hash ^ zhash.castle(castle),
             };
         },
-        .capture => return .{
-            .castle = state.castle | self.srcBit() | self.destBit(),
-            .enpassant = self.enpassant,
-            .no_capture_clock = 0,
-            .ply = state.ply + 1,
-            .hash = state.hash ^
+        .capture => {
+            const castle = state.castle | self.srcBit() | self.destBit();
+            const base_hash = state.base_hash ^
                 zhash.move ^
                 zhash.piece(color, self.srcPtype(), self.code.compressedSrc()) ^
                 zhash.piece(color, self.destPtype(), self.code.compressedDest()) ^
-                zhash.piece(color.invert(), self.capture_place.ptype, coord.compress(self.capture_coord)) ^
-                zhash.enpassant(state.enpassant) ^
-                zhash.castle(state.castle) ^
-                zhash.castle(state.castle | self.srcBit() | self.destBit()),
+                zhash.piece(color.invert(), self.capture_place.ptype, coord.compress(self.capture_coord));
+            return .{
+                .castle = castle,
+                .enpassant = self.enpassant,
+                .no_capture_clock = 0,
+                .ply = state.ply + 1,
+                .base_hash = base_hash,
+                .hash = base_hash ^ zhash.enpassant(self.enpassant) ^ zhash.castle(castle),
+            };
         },
     }
 }

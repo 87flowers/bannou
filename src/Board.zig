@@ -26,12 +26,14 @@ pub fn emptyBoard() Board {
                 .enpassant = 0xff,
                 .no_capture_clock = 0,
                 .ply = 0,
+                .base_hash = undefined,
                 .hash = undefined,
             },
             .active_color = .white,
             .zhistory = undefined,
         };
-        result.state.hash = result.calcHashSlow();
+        result.state.base_hash = result.calcBaseHashSlow();
+        result.state.hash = result.calcHashSlow(result.state.base_hash);
         result.zhistory[result.state.ply] = result.state.hash;
         break :blk result;
     };
@@ -83,21 +85,23 @@ pub fn place(self: *Board, id: u5, ptype: PieceType, where: u8) void {
     self.pieces[id] = ptype;
     self.where[id] = where;
     self.board[where] = Place{ .ptype = ptype, .id = id };
+    self.state.base_hash ^= zhash.piece(Color.fromId(id), ptype, coord.compress(where));
     self.state.hash ^= zhash.piece(Color.fromId(id), ptype, coord.compress(where));
     self.zhistory[self.state.ply] = self.state.hash;
-    assert(self.state.hash == self.calcHashSlow());
+    assert(self.state.hash == self.calcHashSlow(self.calcBaseHashSlow()));
 }
 
 pub fn unplace(self: *Board, id: u5) void {
     assert(self.pieces[id] != .none and !self.board[self.where[id]].isEmpty());
     const ptype = self.pieces[id];
     const where = self.where[id];
+    self.state.base_hash ^= zhash.piece(Color.fromId(id), ptype, coord.compress(where));
     self.state.hash ^= zhash.piece(Color.fromId(id), ptype, coord.compress(where));
     self.zhistory[self.state.ply] = self.state.hash;
     self.pieces[id] = .none;
     self.where[id] = 0xFF;
     self.board[where] = Place.empty;
-    assert(self.state.hash == self.calcHashSlow());
+    assert(self.state.hash == self.calcHashSlow(self.calcBaseHashSlow()));
 }
 
 pub fn move(self: *Board, m: Move) State {
@@ -139,7 +143,7 @@ pub fn move(self: *Board, m: Move) State {
     }
     self.active_color = self.active_color.invert();
     self.zhistory[self.state.ply] = self.state.hash;
-    assert(self.state.hash == self.calcHashSlow());
+    assert(self.state.hash == self.calcHashSlow(self.calcBaseHashSlow()));
     return result;
 }
 
@@ -361,13 +365,14 @@ pub fn unmove(self: *Board, m: Move, old_state: State) void {
 
 pub fn moveNull(self: *Board) State {
     const result = self.state;
+    self.state.base_hash ^= zhash.move;
     self.state.hash ^= zhash.move ^ zhash.enpassant(self.state.enpassant);
     self.state.enpassant = 0xFF;
     self.state.no_capture_clock = 0;
     self.state.ply += 1;
     self.active_color = self.active_color.invert();
     self.zhistory[self.state.ply] = self.state.hash;
-    assert(self.state.hash == self.calcHashSlow());
+    assert(self.state.hash == self.calcHashSlow(self.calcBaseHashSlow()));
     return result;
 }
 
@@ -429,16 +434,21 @@ fn isVisibleBySlider(self: *Board, comptime dirs: anytype, src: u8, dest: u8) bo
     return true;
 }
 
-pub fn calcHashSlow(self: *const Board) Hash {
+pub fn calcBaseHashSlow(self: *const Board) Hash {
     var result: Hash = 0;
     for (0..32) |i| {
         const ptype = self.pieces[i];
         const where = self.where[i];
         if (ptype != .none) result ^= zhash.piece(Color.fromId(@intCast(i)), ptype, coord.compress(where));
     }
+    if (self.active_color == .black) result ^= zhash.move;
+    return result;
+}
+
+pub fn calcHashSlow(self: *const Board, base_hash: Hash) Hash {
+    var result: Hash = base_hash;
     result ^= zhash.enpassant(self.state.enpassant);
     result ^= zhash.castle(self.state.castle);
-    if (self.active_color == .black) result ^= zhash.move;
     return result;
 }
 
@@ -532,7 +542,8 @@ pub fn parseParts(board_str: []const u8, color_str: []const u8, castle_str: []co
     result.active_color = try Color.parse(color_str[0]);
 
     result.state = try State.parseParts(result.active_color, castle_str, enpassant_str, no_capture_clock_str, ply_str);
-    result.state.hash = result.calcHashSlow();
+    result.state.base_hash = result.calcBaseHashSlow();
+    result.state.hash = result.calcHashSlow(result.state.base_hash);
     result.zhistory[result.state.ply] = result.state.hash;
 
     return result;
