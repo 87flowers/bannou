@@ -1,9 +1,9 @@
-const max_history_value: i32 = 1 << 24;
+const max_history_value: i16 = std.math.maxInt(i16);
 
 board: Board,
 tt: TT,
 killers: [common.max_game_ply]MoveCode,
-history: [6 * 64 * 64]i32,
+history: [6 * 64 * 64]i16,
 counter_moves: [2 * 64 * 64]MoveCode,
 
 base_position: Board = Board.defaultBoard(),
@@ -151,15 +151,15 @@ fn updateCounter(self: *Game, m: Move) void {
     self.counter_moves[index] = m.code;
 }
 
-fn getHistory(self: *Game, m: Move) *i32 {
+fn getHistory(self: *Game, m: Move) *i16 {
     const ptype: usize = @intFromEnum(m.destPtype()) - 1;
     return &self.history[ptype * 64 * 64 + m.code.compressedPair()];
 }
 
-fn updateHistory(self: *Game, m: Move, adjustment: i32) void {
+fn updateHistory(self: *Game, m: Move, adjustment: i16) void {
     const h = self.getHistory(m);
-    const abs_adjustment: i32 = @intCast(@abs(adjustment));
-    const grav: i32 = @intCast(@divTrunc(@as(i64, h.*) * abs_adjustment, max_history_value));
+    const abs_adjustment: i16 = @intCast(@abs(adjustment));
+    const grav: i16 = @intCast(@divTrunc(@as(i32, h.*) * abs_adjustment, max_history_value));
     h.* += adjustment - grav;
 }
 
@@ -175,7 +175,7 @@ pub fn recordHistory(self: *Game, depth: i32, moves: *const MoveList, i: usize) 
     }
 
     if (!m.isCapture()) {
-        const adjustment: i32 = depth * 1000 - 300;
+        const adjustment: i16 = @intCast(depth * 100 - 30);
 
         // History penalty
         for (moves.moves[0..i]) |badm| {
