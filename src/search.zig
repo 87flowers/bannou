@@ -236,6 +236,8 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
     }
     game.sortMoves(&moves, best_move);
 
+    game.clearChildKiller();
+
     var best_i: usize = undefined;
     var moves_visited: usize = 0;
     var quiets_visited: usize = 0;

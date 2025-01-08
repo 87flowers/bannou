@@ -127,6 +127,10 @@ pub fn sortMoves(self: *Game, moves: *MoveList, tt_move: MoveCode) void {
     moves.sortInOrder(&sort_scores);
 }
 
+pub fn clearChildKiller(self: *Game) void {
+    self.killers[self.move_history_len + 1] = MoveCode.none;
+}
+
 fn getKiller(self: *Game) MoveCode {
     return self.killers[self.move_history_len];
 }
