@@ -317,7 +317,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
     if (best_score < 0 and eval.isMateScore(best_score)) best_score = best_score + 1;
 
     game.ttStore(.{
-        .best_move = if (best_score > alpha or tte.move().isNone())
+        .best_move = if (best_score > alpha)
             best_move
         else
             tte.move(),
