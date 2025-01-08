@@ -429,6 +429,13 @@ fn isVisibleBySlider(self: *Board, comptime dirs: anytype, src: u8, dest: u8) bo
     return true;
 }
 
+pub fn isMoveCodeTactical(self: *const Board, code: MoveCode) bool {
+    if (!self.board[code.dest()].isEmpty()) return true;
+    if (code.dest() == self.state.enpassant) return true;
+    if (code.isPromotion()) return true;
+    return false;
+}
+
 pub fn calcHashSlow(self: *const Board) Hash {
     var result: Hash = 0;
     for (0..32) |i| {

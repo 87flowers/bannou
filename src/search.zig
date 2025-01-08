@@ -157,6 +157,11 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
         .upper => tte.score <= alpha,
     }) {
         ctrl.trackTtPrune(mode);
+
+        if (tte.score >= beta) {
+            game.recordHistoryTT(depth, tte.move());
+        }
+
         pv.write(tte.move(), &.{});
         return tte.score;
     }

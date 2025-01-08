@@ -121,7 +121,7 @@ pub fn sortMoves(self: *Game, moves: *MoveList, tt_move: MoveCode) void {
                 break :blk @as(i32, 123 << 24) + 1;
             if (m.code.code == counter_move.code)
                 break :blk @as(i32, 123 << 24) + 0;
-            break :blk self.getHistory(m).*;
+            break :blk self.getHistory(m.destPtype(), m.code).*;
         };
     }
     moves.sortInOrder(&sort_scores);
@@ -151,13 +151,13 @@ fn updateCounter(self: *Game, m: Move) void {
     self.counter_moves[index] = m.code;
 }
 
-fn getHistory(self: *Game, m: Move) *i32 {
-    const ptype: usize = @intFromEnum(m.destPtype()) - 1;
-    return &self.history[ptype * 64 * 64 + m.code.compressedPair()];
+fn getHistory(self: *Game, ptype: PieceType, code: MoveCode) *i32 {
+    const pt: usize = @intFromEnum(ptype) - 1;
+    return &self.history[pt * 64 * 64 + code.compressedPair()];
 }
 
-fn updateHistory(self: *Game, m: Move, adjustment: i32) void {
-    const h = self.getHistory(m);
+fn updateHistory(self: *Game, ptype: PieceType, code: MoveCode, adjustment: i32) void {
+    const h = self.getHistory(ptype, code);
     const abs_adjustment: i32 = @intCast(@abs(adjustment));
     const grav: i32 = @intCast(@divTrunc(@as(i64, h.*) * abs_adjustment, max_history_value));
     h.* += adjustment - grav;
@@ -182,11 +182,23 @@ pub fn recordHistory(self: *Game, depth: i32, moves: *const MoveList, i: usize) 
             if (badm.isCapture() or (m.isPromotion() and m.destPtype() == .q)) continue;
             if (badm.code.code == old_killer.code) continue;
             if (badm.code.code == old_counter.code) continue;
-            self.updateHistory(badm, -adjustment);
+            self.updateHistory(badm.destPtype(), badm.code, -adjustment);
         }
 
         // History bonus
-        self.updateHistory(m, adjustment);
+        self.updateHistory(m.destPtype(), m.code, adjustment);
+    }
+}
+
+pub fn recordHistoryTT(self: *Game, depth: i32, code: MoveCode) void {
+    if (code.isNone()) return;
+
+    const ptype = self.board.board[code.src()].ptype;
+    if (ptype == .none) return;
+
+    if (!self.board.isMoveCodeTactical(code)) {
+        const adjustment: i32 = depth * 1000 - 300;
+        self.updateHistory(ptype, code, adjustment);
     }
 }
 
