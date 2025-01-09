@@ -94,26 +94,22 @@ pub fn Control(comptime config: struct {
             }
         }
 
-        pub fn format(self: *@This(), comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
-            const nps = self.nodes * std.time.ns_per_s / self.timer.read();
-            try writer.print("time {} nodes {} nps {}", .{ self.timer.read() / std.time.ns_per_ms, self.nodes, nps });
-        }
-
-        pub fn printStats(self: *@This(), write: anytype) !void {
+        pub fn printStats(self: *@This(), out: anytype) !void {
             if (!config.stats) return;
-            try write.print("# nodes:                     {:>8}\n", .{self.stats.nodes});
-            try write.print("# nodes_in_nmr:              {:>8}\n", .{self.stats.nodes_in_nmr});
-            try write.print("# qnodes:                    {:>8} ({d:.2}%)\n", .{ self.stats.qnodes, percentage(self.stats.qnodes, self.stats.nodes) });
-            try write.print("# zw_nodes:                  {:>8} ({d:.2}%)\n", .{ self.stats.zw_nodes, percentage(self.stats.zw_nodes, self.stats.nodes) });
-            try write.print("# zw_qnodes:                 {:>8} ({d:.2}% q, {d:.2}% zw)\n", .{ self.stats.zw_qnodes, percentage(self.stats.zw_qnodes, self.stats.qnodes), percentage(self.stats.zw_qnodes, self.stats.zw_nodes) });
-            try write.print("# tt_prune:                  {:>8}\n", .{self.stats.tt_prune});
-            try write.print("# rfp_success:               {:>8}\n", .{self.stats.rfp_success});
-            try write.print("# nmr_attempts:              {:>8}\n", .{self.stats.nmr_attempts});
-            try write.print("# nmr_prunes:                {:>8} ({d:.2}%)\n", .{ self.stats.nmr_prunes, percentage(self.stats.nmr_prunes, self.stats.nmr_attempts) });
-            try write.print("# nmr_reductions:            {:>8} ({d:.2}%)\n", .{ self.stats.nmr_reductions, percentage(self.stats.nmr_reductions, self.stats.nmr_attempts) });
-            try write.print("# tt_prune_while_in_nmr:     {:>8}\n", .{self.stats.tt_prune_while_in_nmr});
-            try write.print("# rfp_success_while_in_nmr:  {:>8}\n", .{self.stats.rfp_success_while_in_nmr});
-            try write.print("# nmr_attempts_while_in_nmr: {:>8}\n", .{self.stats.nmr_attempts_while_in_nmr});
+            try out.raw("# nodes:                     {:>8}\n", .{self.stats.nodes});
+            try out.raw("# nodes_in_nmr:              {:>8}\n", .{self.stats.nodes_in_nmr});
+            try out.raw("# qnodes:                    {:>8} ({d:.2}%)\n", .{ self.stats.qnodes, percentage(self.stats.qnodes, self.stats.nodes) });
+            try out.raw("# zw_nodes:                  {:>8} ({d:.2}%)\n", .{ self.stats.zw_nodes, percentage(self.stats.zw_nodes, self.stats.nodes) });
+            try out.raw("# zw_qnodes:                 {:>8} ({d:.2}% q, {d:.2}% zw)\n", .{ self.stats.zw_qnodes, percentage(self.stats.zw_qnodes, self.stats.qnodes), percentage(self.stats.zw_qnodes, self.stats.zw_nodes) });
+            try out.raw("# tt_prune:                  {:>8}\n", .{self.stats.tt_prune});
+            try out.raw("# rfp_success:               {:>8}\n", .{self.stats.rfp_success});
+            try out.raw("# nmr_attempts:              {:>8}\n", .{self.stats.nmr_attempts});
+            try out.raw("# nmr_prunes:                {:>8} ({d:.2}%)\n", .{ self.stats.nmr_prunes, percentage(self.stats.nmr_prunes, self.stats.nmr_attempts) });
+            try out.raw("# nmr_reductions:            {:>8} ({d:.2}%)\n", .{ self.stats.nmr_reductions, percentage(self.stats.nmr_reductions, self.stats.nmr_attempts) });
+            try out.raw("# tt_prune_while_in_nmr:     {:>8}\n", .{self.stats.tt_prune_while_in_nmr});
+            try out.raw("# rfp_success_while_in_nmr:  {:>8}\n", .{self.stats.rfp_success_while_in_nmr});
+            try out.raw("# nmr_attempts_while_in_nmr: {:>8}\n", .{self.stats.nmr_attempts_while_in_nmr});
+            try out.flush();
         }
     };
 }
@@ -316,7 +312,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
             return eval.mated;
         }
     }
-    if (best_score < 0 and eval.isMateScore(best_score)) best_score = best_score + 1;
+    if (best_score < 0 and eval.isMateScore(best_score)) best_score += 1;
 
     game.ttStore(.{
         .best_move = if (best_score > alpha or tte.move().isNone())
@@ -362,21 +358,21 @@ fn forDepth(game: *Game, ctrl: anytype, pv: anytype, depth: i32, prev_score: Sco
     return try search(game, ctrl, pv, min_window, max_window, 0, depth, .firstply);
 }
 
-pub fn go(output: anytype, game: *Game, ctrl: anytype, pv: anytype) !Score {
+pub fn go(out: anytype, game: *Game, ctrl: anytype, pv: anytype) !Score {
     // comptime assert(@typeInfo(@TypeOf(ctrl)) == .pointer and @typeInfo(@TypeOf(pv)) == .pointer);
     var depth: i32 = 1;
     var score: Score = undefined;
     var current_pv = pv.new();
     while (depth < common.max_search_ply) : (depth += 1) {
         score = forDepth(game, ctrl, &current_pv, depth, score) catch {
-            try output.print("info depth {} score cp {} {} pv {} string [search terminated]\n", .{ depth, score, ctrl, pv });
+            try out.info(depth, score, ctrl, pv, .early_termination);
             break;
         };
         pv.copyFrom(&current_pv);
-        try output.print("info depth {} score cp {} {} pv {}\n", .{ depth, score, ctrl, pv });
+        try out.info(depth, score, ctrl, pv, .normal);
         if (ctrl.checkSoftTermination(depth)) break;
     }
-    try ctrl.printStats(output);
+    try ctrl.printStats(out);
     return score;
 }
 

@@ -14,7 +14,7 @@ fn core(board: *Board, depth: usize) usize {
     return result;
 }
 
-pub fn perft(output: anytype, board: *Board, depth: usize) !void {
+pub fn perft(out: anytype, board: *Board, depth: usize) !void {
     if (depth == 0) return;
     var result: usize = 0;
     var moves = MoveList{};
@@ -26,13 +26,15 @@ pub fn perft(output: anytype, board: *Board, depth: usize) !void {
         if (board.isValid()) {
             const p = core(board, depth - 1);
             result += p;
-            try output.print("{}: {}\n", .{ m, p });
+            try out.raw("{}: {}\n", .{ m, p });
+            try out.flush();
         }
         board.unmove(m, old_state);
     }
     const elapsed: f64 = @floatFromInt(timer.read());
-    try output.print("Nodes searched (depth {}): {}\n", .{ depth, result });
-    try output.print("Search completed in {d:.1}ms\n", .{elapsed / std.time.ns_per_ms});
+    try out.raw("Nodes searched (depth {}): {}\n", .{ depth, result });
+    try out.raw("Search completed in {d:.1}ms\n", .{elapsed / std.time.ns_per_ms});
+    try out.flush();
 }
 
 const std = @import("std");

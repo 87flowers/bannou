@@ -9,22 +9,22 @@ ply: u16,
 /// Zorbrist hash for position
 hash: Hash,
 
-pub fn format(self: *const State, writer: anytype, board: *const Board) !void {
+pub fn format(self: *const State, _: anytype, _: anytype, writer: anytype) !void {
     // castling state
     var hasCastle = false;
-    if (self.castle & castle_mask.wk == 0 and board.board[0x04].ptype == .k and board.board[0x07].ptype == .r) {
+    if (self.castle & castle_mask.wk == 0) {
         try writer.print("K", .{});
         hasCastle = true;
     }
-    if (self.castle & castle_mask.wq == 0 and board.board[0x04].ptype == .k and board.board[0x00].ptype == .r) {
+    if (self.castle & castle_mask.wq == 0) {
         try writer.print("Q", .{});
         hasCastle = true;
     }
-    if (self.castle & castle_mask.bk == 0 and board.board[0x74].ptype == .k and board.board[0x77].ptype == .r) {
+    if (self.castle & castle_mask.bk == 0) {
         try writer.print("k", .{});
         hasCastle = true;
     }
-    if (self.castle & castle_mask.bq == 0 and board.board[0x74].ptype == .k and board.board[0x70].ptype == .r) {
+    if (self.castle & castle_mask.bq == 0) {
         try writer.print("q", .{});
         hasCastle = true;
     }
