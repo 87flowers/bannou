@@ -1,4 +1,4 @@
-pub fn run(output: anytype, g: *Game, comptime stats: enum { with_stats, no_stats }) !void {
+pub fn run(out: anytype, g: *Game, comptime stats: enum { with_stats, no_stats }) !void {
     var time: u64 = 0;
     var nodes: u64 = 0;
 
@@ -6,19 +6,19 @@ pub fn run(output: anytype, g: *Game, comptime stats: enum { with_stats, no_stat
 
     for (fens) |fen| {
         g.reset();
-        try output.print("benching {s}\n", .{fen});
+        try out.raw("benching {s}\n", .{fen});
         g.board = try Board.parse(fen);
 
         control.reset();
         var pv = line.Line{};
-        _ = try search.go(output, g, &control, &pv);
+        _ = try search.go(out, g, &control, &pv);
 
         time += control.timer.read();
         nodes += control.nodes;
-        try output.print("\n", .{});
+        try out.raw("\n", .{});
     }
 
-    try output.print(
+    try out.raw(
         \\bench results:
         \\nodes: {} nodes
         \\time:  {} milliseconds
@@ -29,6 +29,7 @@ pub fn run(output: anytype, g: *Game, comptime stats: enum { with_stats, no_stat
         time / std.time.ns_per_ms,
         nodes * std.time.ns_per_s / time,
     });
+    try out.flush();
 
     g.reset();
 }

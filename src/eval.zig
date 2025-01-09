@@ -176,6 +176,11 @@ pub fn clampScore(raw: anytype) Score {
 pub fn isMateScore(score: Score) bool {
     return @abs(score) > 8000;
 }
+pub fn distanceToMate(score: Score) ?i32 {
+    if (!isMateScore(score)) return null;
+    const dist: i32 = @intCast(@abs(mated) - @abs(score));
+    return std.math.sign(score) * dist;
+}
 
 pub const Score = i14;
 pub const no_moves: Score = -std.math.maxInt(Score);

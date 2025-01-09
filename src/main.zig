@@ -1,4 +1,4 @@
-const bannou_version = "0.61";
+const bannou_version = "0.62";
 
 const TimeControl = struct {
     wtime: ?u64 = null,
@@ -11,7 +11,7 @@ const TimeControl = struct {
 var g: Game = undefined;
 
 const Uci = struct {
-    output: std.io.BufferedWriter(4096, std.fs.File.Writer).Writer,
+    out: output.Uci,
 
     fn go(self: *Uci, tc: TimeControl) !void {
         const margin = 100;
@@ -26,8 +26,16 @@ const Uci = struct {
         var info = search.TimeControl.init(.{ .soft_deadline = deadline / 2, .hard_deadline = safe_time_remaining / 2 });
 
         var bestmove = line.RootMove{};
-        _ = try search.go(self.output, &g, &info, &bestmove);
-        try self.output.print("bestmove {}\n", .{bestmove});
+        _ = try search.go(&self.out, &g, &info, &bestmove);
+        try self.out.bestmove(bestmove.move);
+    }
+
+    fn expectToken(self: *Uci, comptime command: []const u8, it: *Iterator, comptime token: []const u8) !bool {
+        if (it.next()) |token_str| {
+            if (std.mem.eql(u8, token_str, token)) return true;
+            try self.out.unrecognisedToken(command, token_str);
+        }
+        return false;
     }
 
     const Iterator = std.mem.TokenIterator(u8, .any);
@@ -44,36 +52,30 @@ const Uci = struct {
             const no_capture_clock = it.next() orelse "";
             const ply = it.next() orelse "";
             g.setPosition(Board.parseParts(board_str, color, castling, enpassant, no_capture_clock, ply) catch
-                return self.output.print("info string Error: Invalid FEN for position command\n", .{}));
+                return self.out.protocolError("position", "invalid fen provided", .{}));
         } else {
-            try self.output.print("info string Error: Invalid position type '{s}' for position command\n", .{pos_type});
+            try self.out.unrecognisedToken("position", pos_type);
             return;
         }
 
-        if (it.next()) |moves_str| {
-            if (!std.mem.eql(u8, moves_str, "moves"))
-                return self.output.print("info string Error: Unexpected token '{s}' in position command\n", .{moves_str});
+        if (try self.expectToken("position", it, "moves")) {
             try self.uciParseMoveSequence(it);
         }
     }
 
     fn uciParseUndo(self: *Uci, it: *Iterator) !void {
-        const count = std.fmt.parseUnsigned(usize, it.next() orelse "1", 10) catch
-            return self.output.print("info string Error: Invalid argument to undo\n", .{});
+        const count_str = it.next() orelse "1";
+        const count = std.fmt.parseUnsigned(usize, count_str, 10) catch return self.out.unrecognisedToken("undo", count_str);
 
         // Replay up to current position
         if (!g.undoAndReplay(count))
-            return self.output.print("info string Error: Undo count too large\n", .{});
+            return self.out.protocolError("undo", "requested undo count too large", .{});
     }
 
     fn uciParseMoveSequence(self: *Uci, it: *Iterator) !void {
         while (it.next()) |move_str| {
-            const code = MoveCode.parse(move_str) catch
-                return self.output.print("info string Error: Invalid movecode '{s}'\n", .{move_str});
-            if (!g.makeMoveByCode(code)) {
-                try self.output.print("info string Error: Illegal move '{}' in position {}\n", .{ code, g.board });
-                return;
-            }
+            const code = MoveCode.parse(move_str) catch return self.out.illegalMoveString(move_str);
+            if (!g.makeMoveByCode(code)) return self.out.illegalMove(code);
         }
     }
 
@@ -95,30 +97,30 @@ const Uci = struct {
             } else if (std.mem.eql(u8, part, "movestogo")) {
                 const str = it.next() orelse break;
                 tc.movestogo = std.fmt.parseUnsigned(u64, str, 10) catch continue;
+            } else {
+                try self.out.unrecognisedToken("go", part);
             }
         }
         try self.go(tc);
     }
 
     fn uciParsePerft(self: *Uci, it: *Iterator) !void {
-        const depth = std.fmt.parseUnsigned(usize, it.next() orelse "1", 10) catch
-            return self.output.print("info string Error: Invalid argument to l.perft\n", .{});
-        try cmd_perft.perft(self.output, &g.board, depth);
+        const depth_str = it.next() orelse "1";
+        const depth = std.fmt.parseUnsigned(usize, depth_str, 10) catch return self.out.unrecognisedToken("perft", depth_str);
+        try cmd_perft.perft(&self.out, &g.board, depth);
     }
 
-    fn uciParseBestMove(self: *Uci, it: *Iterator, make_move: enum { make_move, print_only }) !void {
-        const depth = std.fmt.parseInt(i32, it.next() orelse "1", 10) catch
-            return self.output.print("info string Error: Invalid argument to l.perft\n", .{});
+    fn uciParseAuto(self: *Uci, it: *Iterator) !void {
+        const depth_str = it.next() orelse "1";
+        const depth: i32 = std.fmt.parseUnsigned(u31, depth_str, 10) catch return self.out.unrecognisedToken("auto", depth_str);
         var ctrl = search.DepthControl.init(.{ .target_depth = depth });
         var pv = line.Line{};
-        const score = try search.go(self.output, &g, &ctrl, &pv);
-        try self.output.print("score cp {} pv {}\n", .{ score, pv });
-        if (make_move == .make_move) {
-            if (pv.len > 0) {
-                _ = g.makeMoveByCode(pv.pv[0]);
-            } else {
-                try self.output.print("No valid move.\n", .{});
-            }
+        _ = try search.go(&self.out, &g, &ctrl, &pv);
+        if (pv.len > 0) {
+            try self.out.bestmove(pv.pv[0]);
+            _ = g.makeMoveByCode(pv.pv[0]);
+        } else {
+            try self.out.bestmove(null);
         }
     }
 
@@ -130,35 +132,32 @@ const Uci = struct {
         } else if (std.mem.eql(u8, command, "go")) {
             try self.uciParseGo(&it);
         } else if (std.mem.eql(u8, command, "isready")) {
-            try self.output.print("readyok\n", .{});
+            try self.out.pong();
         } else if (std.mem.eql(u8, command, "ucinewgame")) {
             g.reset();
         } else if (std.mem.eql(u8, command, "uci")) {
-            try self.output.print(
+            try self.out.raw(
                 \\id name Bannou {s}
                 \\id author 87 (87flowers.com)
                 \\option name Hash type spin default {} min 1 max 65535
                 \\option name Threads type spin default 1 min 1 max 1
                 \\uciok
                 \\
-            , .{ bannou_version, TT.default_tt_size_mb});
+            , .{ bannou_version, TT.default_tt_size_mb });
+            try self.out.flush();
         } else if (std.mem.eql(u8, command, "setoption")) {
-            const name_str = it.next() orelse return;
-            if (!std.mem.eql(u8, name_str, "name"))
-                return self.output.print("info string Error: Unexpected token '{s}' in setoption command\n", .{name_str});
+            if (!try self.expectToken("setoption", &it, "name")) return;
             const name = it.next() orelse return;
             if (std.mem.eql(u8, name, "Threads")) {
                 // do nothing
             } else if (std.mem.eql(u8, name, "Hash")) {
-                const value_str = it.next() orelse return;
-                if (!std.mem.eql(u8, value_str, "value"))
-                    return self.output.print("info string Error: Unexpected token '{s}' in setoption command\n", .{value_str});
-                const value: ?usize = std.fmt.parseUnsigned(u16, it.next() orelse "0", 10) catch null;
-                if (value.? == 0 or value == null)
-                    return self.output.print("info string Error: Invalid value for option Hash\n", .{});
-                try g.tt.setHashSizeMb(value.?);
+                if (!try self.expectToken("setoption", &it, "value")) return;
+                const value_str = it.next() orelse return self.out.protocolError("setoption", "no value provided", .{});
+                const value = std.fmt.parseUnsigned(u16, value_str, 10) catch 0;
+                if (value == 0) return self.out.protocolError("setoption", "invalid value provided", .{});
+                try g.tt.setHashSizeMb(value);
             } else {
-                return self.output.print("info string Error: Unrecognised setting name '{s}' in setoption command\n", .{name});
+                return self.out.unrecognisedToken("setoption", name);
             }
         } else if (std.mem.eql(u8, command, "debug")) {
             _ = it.next();
@@ -166,7 +165,7 @@ const Uci = struct {
         } else if (std.mem.eql(u8, command, "quit")) {
             std.process.exit(0);
         } else if (std.mem.eql(u8, command, "d")) {
-            try g.board.debugPrint(self.output);
+            try g.board.debugPrint(&self.out);
         } else if (std.mem.eql(u8, command, "move")) {
             try self.uciParseMoveSequence(&it);
         } else if (std.mem.eql(u8, command, "undo")) {
@@ -174,21 +173,20 @@ const Uci = struct {
         } else if (std.mem.eql(u8, command, "perft") or std.mem.eql(u8, command, "l.perft")) {
             try self.uciParsePerft(&it);
         } else if (std.mem.eql(u8, command, "bench")) {
-            try cmd_bench.run(self.output, &g, .no_stats);
+            try cmd_bench.run(&self.out, &g, .no_stats);
         } else if (std.mem.eql(u8, command, "stats")) {
-            try cmd_bench.run(self.output, &g, .with_stats);
-        } else if (std.mem.eql(u8, command, "bestmove")) {
-            try self.uciParseBestMove(&it, .print_only);
+            try cmd_bench.run(&self.out, &g, .with_stats);
         } else if (std.mem.eql(u8, command, "auto")) {
-            try self.uciParseBestMove(&it, .make_move);
+            try self.uciParseAuto(&it);
         } else if (std.mem.eql(u8, command, "eval")) {
-            try self.output.print("score cp {}\n", .{eval.eval(&g)});
+            try self.out.eval(eval.eval(&g));
         } else if (std.mem.eql(u8, command, "history")) {
             for (g.board.zhistory[0 .. g.board.state.ply + 1], 0..) |h, i| {
-                try self.output.print("{}: {X}\n", .{ i, h });
+                try self.out.raw("{}: {X}\n", .{ i, h });
             }
+            try self.out.flush();
         } else {
-            try self.output.print("info string Error: Unknown command '{s}'\n", .{command});
+            try self.out.protocolError(command, "unknown command", .{});
         }
     }
 };
@@ -201,8 +199,7 @@ pub fn main() !void {
     g = try Game.init(allocator);
     defer g.deinit();
 
-    var output = std.io.bufferedWriter(std.io.getStdOut().writer());
-    var uci = Uci{ .output = output.writer() };
+    var uci = Uci{ .out = output.Uci.init(std.io.bufferedWriter(std.io.getStdOut().writer())) };
 
     // Handle command line arguments
     {
@@ -215,7 +212,7 @@ pub fn main() !void {
         while (args.next()) |arg| {
             has_arguments = true;
             try uci.uciParseCommand(arg);
-            try output.flush();
+            try uci.out.flush();
         }
         if (has_arguments) return;
     }
@@ -226,7 +223,7 @@ pub fn main() !void {
     var buffer: [buffer_size]u8 = undefined;
     while (try input.readUntilDelimiterOrEof(&buffer, '\n')) |input_line| {
         try uci.uciParseCommand(input_line);
-        try output.flush();
+        try uci.out.flush();
     }
 }
 
@@ -237,6 +234,7 @@ const cmd_perft = @import("cmd_perft.zig");
 const common = @import("common.zig");
 const eval = @import("eval.zig");
 const line = @import("line.zig");
+const output = @import("output.zig");
 const search = @import("search.zig");
 const Board = @import("Board.zig");
 const Game = @import("Game.zig");
