@@ -62,8 +62,8 @@ pub fn Control(comptime config: struct {
         }
 
         /// Raises SearchError.EarlyTermination if we should terminate the search
-        pub fn checkHardTermination(self: *@This(), comptime mode: SearchMode, depth: i32) SearchError!void {
-            if (config.time and mode == .normal and depth > 3 and self.time_limit.hard_deadline <= self.timer.read()) return SearchError.EarlyTermination;
+        pub fn checkHardTermination(self: *@This(), comptime mode: SearchMode) SearchError!void {
+            if (config.time and mode == .normal and self.time_limit.hard_deadline <= self.timer.read()) return SearchError.EarlyTermination;
             if (config.nodes and self.nodes >= self.nodes_limit.target_nodes) return SearchError.EarlyTermination;
         }
 
@@ -141,24 +141,36 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
     if (mode != .quiescence) assert(depth > 0);
     if (mode == .quiescence) assert(depth <= 0);
 
-    try ctrl.checkHardTermination(mode, depth);
+    // Bottomed out
+    if (ply >= common.max_search_ply) return if (game.board.isInCheck()) 0 else eval.eval(game);
+
+    try ctrl.checkHardTermination(mode);
 
     // Are we on a PV node?
     const is_pv_node = beta != alpha + 1;
 
     const tte = game.ttLoad();
-    const tthit = !tte.isEmpty() and tte.depth >= depth;
 
-    // Transposition Table Pruning
-    if (!is_pv_node and tthit and switch (tte.bound) {
-        .empty => false,
-        .lower => tte.score >= beta,
-        .exact => true,
-        .upper => tte.score <= alpha,
-    }) {
-        ctrl.trackTtPrune(mode);
-        pv.write(tte.move(), &.{});
-        return tte.score;
+    if (!is_pv_node) {
+        if (!tte.isEmpty()) {
+            // Transposition Table Pruning
+            if (tte.depth >= depth and switch (tte.bound) {
+                .empty => false,
+                .lower => tte.score >= beta,
+                .exact => true,
+                .upper => tte.score <= alpha,
+            }) {
+                ctrl.trackTtPrune(mode);
+                pv.write(tte.move(), &.{});
+                return tte.score;
+            }
+
+            // Transposition Table Extension (via Ciekce)
+            if (mode == .normal and depth < 3 and tte.depth >= depth and !tte.move().isNone()) depth += 1;
+        } else {
+            // Internal Iterative Reductions
+            if (mode == .normal and depth > 3) depth -= 1;
+        }
     }
 
     // Static evaluation with TT replacement
@@ -172,9 +184,6 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
         tte.score
     else
         first_static_eval;
-
-    // Internal Iterative Reductions
-    if (!is_pv_node and mode == .normal and tte.isEmpty() and depth > 3) depth -= 1;
 
     var best_score: Score = eval.no_moves;
     var best_move: MoveCode = tte.move();
@@ -319,7 +328,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
     if (best_score < 0 and eval.isMateScore(best_score)) best_score = best_score + 1;
 
     game.ttStore(.{
-        .best_move = if (best_score > alpha or tte.move().isNone())
+        .best_move = if (best_score > alpha)
             best_move
         else
             tte.move(),
