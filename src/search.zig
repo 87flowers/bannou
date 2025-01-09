@@ -147,18 +147,28 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
     const is_pv_node = beta != alpha + 1;
 
     const tte = game.ttLoad();
-    const tthit = !tte.isEmpty() and tte.depth >= depth;
 
-    // Transposition Table Pruning
-    if (!is_pv_node and tthit and switch (tte.bound) {
-        .empty => false,
-        .lower => tte.score >= beta,
-        .exact => true,
-        .upper => tte.score <= alpha,
-    }) {
-        ctrl.trackTtPrune(mode);
-        pv.write(tte.move(), &.{});
-        return tte.score;
+    if (!is_pv_node) {
+        if (!tte.isEmpty()) {
+            // Transposition Table Pruning
+            if (tte.depth >= depth and switch (tte.bound) {
+                .empty => false,
+                .lower => tte.score >= beta,
+                .exact => true,
+                .upper => tte.score <= alpha,
+            }) {
+                ctrl.trackTtPrune(mode);
+                pv.write(tte.move(), &.{});
+                return tte.score;
+            }
+
+            // Transposition Table Extension (via Ciekce)
+            // Ply check as this sometimes causes stack overflow?
+            if (mode == .normal and depth < 3 and ply < 10 and tte.depth > depth and !tte.move().isNone()) depth += 1;
+        } else {
+            // Internal Iterative Reductions
+            if (mode == .normal and depth > 3) depth -= 1;
+        }
     }
 
     // Static evaluation with TT replacement
@@ -172,9 +182,6 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
         tte.score
     else
         first_static_eval;
-
-    // Internal Iterative Reductions
-    if (mode == .normal and tte.isEmpty() and depth > 3) depth -= 1;
 
     var best_score: Score = eval.no_moves;
     var best_move: MoveCode = tte.move();
