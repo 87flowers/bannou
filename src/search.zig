@@ -174,7 +174,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
         first_static_eval;
 
     // Internal Iterative Reductions
-    if (mode == .normal and tte.isEmpty() and depth > 3) depth -= 1;
+    if (!is_pv_node and mode == .normal and tte.isEmpty() and depth > 3) depth -= 1;
 
     var best_score: Score = eval.no_moves;
     var best_move: MoveCode = tte.move();
@@ -280,7 +280,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
                 // PVS Scout Search
                 if (mode != .quiescence and moves_visited != 0 and is_pv_node) {
                     const scout_score = -try search2(game, ctrl, line.Null{}, -a - 1, -a, ply + 1, depth - 1, mode);
-                    if (scout_score <= a or scout_score >= beta) break :blk scout_score;
+                    if (scout_score <= a) break :blk scout_score;
                 }
 
                 break :blk -try search2(game, ctrl, &child_pv, -beta, -a, ply + 1, depth - 1, mode);
@@ -309,7 +309,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
         game.recordHistory(depth, &moves, best_i);
     }
 
-    if (best_score == eval.no_moves) {
+    if (mode != .quiescence and moves_visited == 0) {
         pv.writeEmpty();
         if (!is_in_check) {
             return eval.draw;
