@@ -202,7 +202,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
             ctrl.trackNmrAttempt(mode);
 
             const old_state = game.moveNull();
-            const nws_reduction = 4 + @divFloor(depth, 6);
+            const nws_reduction = 4 + @divTrunc(depth, 6);
             const null_score = -try search2(game, ctrl, line.Null{}, -beta, -beta +| 1, ply + 1, depth - nws_reduction, .normal);
             game.unmoveNull(old_state);
 
@@ -219,7 +219,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
                 // This is the same as a normal search except:
                 // - With a "pruneable" flag set (the .nullmove mode)
                 // - Depth reduced by 1
-                const nmr_reduction = 1 + @divFloor(depth, 6);
+                const nmr_reduction = 1 + @divTrunc(depth, 6);
                 return search(game, ctrl, line.Null{}, alpha, beta, ply, depth - nmr_reduction, .nullmove);
             }
         }
@@ -312,7 +312,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
             return eval.mated;
         }
     }
-    if (best_score < 0 and eval.isMateScore(best_score)) best_score += 1;
+    if (eval.isMateScore(best_score)) best_score -= std.math.sign(best_score);
 
     game.ttStore(.{
         .best_move = if (best_score > alpha or tte.move().isNone())
