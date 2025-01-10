@@ -178,7 +178,7 @@ pub fn isMateScore(score: Score) bool {
 }
 pub fn distanceToMate(score: Score) ?i32 {
     if (!isMateScore(score)) return null;
-    const dist: i32 = @intCast(@abs(mated) - @abs(score));
+    const dist: i32 = @intCast(std.math.divCeil(u32, @abs(mated) - @abs(score), 2) catch unreachable);
     return std.math.sign(score) * dist;
 }
 
