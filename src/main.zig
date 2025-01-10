@@ -1,4 +1,4 @@
-const bannou_version = "0.64";
+const bannou_version = "0.65";
 
 const TimeControl = struct {
     wtime: ?u64 = null,
@@ -25,9 +25,9 @@ const Uci = struct {
         const deadline = safe_time_remaining / movestogo; // nanoseconds
         var info = search.TimeControl.init(.{ .soft_deadline = deadline / 2, .hard_deadline = safe_time_remaining / 2 });
 
-        var bestmove = line.RootMove{};
-        _ = try search.go(&self.out, &g, &info, &bestmove);
-        try self.out.bestmove(bestmove.move);
+        var pv = line.Line{};
+        _ = try search.go(&self.out, &g, &info, &pv);
+        try self.out.bestmove(if (pv.len > 0) pv.pv[0] else null);
     }
 
     fn expectToken(self: *Uci, comptime command: []const u8, it: *Iterator, comptime token: []const u8) !bool {

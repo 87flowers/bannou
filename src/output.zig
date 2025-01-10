@@ -57,11 +57,13 @@ pub const Uci = struct {
 
         const elapsed = ctrl.timer.read();
         const nps = ctrl.nodes * std.time.ns_per_s / elapsed;
-        try self.raw("info depth {} score cp {} time {} nodes {} nps {} pv {}" ++ trailing, .{ depth, score, elapsed / std.time.ns_per_ms, ctrl.nodes, nps, pv });
+        try self.raw("info depth {} ", .{depth});
+        try self.printEval(score);
+        try self.raw(" time {} nodes {} nps {} pv {}" ++ trailing, .{ elapsed / std.time.ns_per_ms, ctrl.nodes, nps, pv });
         try self.flush();
     }
 
-    fn printEval(self: *Uci, score: Score) !void {
+    inline fn printEval(self: *Uci, score: Score) !void {
         if (@import("eval.zig").distanceToMate(score)) |md| {
             try self.raw("score mate {}", .{md});
         } else {
