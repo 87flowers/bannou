@@ -54,7 +54,7 @@ pub fn store(self: *TT, hash: Hash, depth: u7, best_move: MoveCode, bound: Bound
         assert(bucket.metas[index] == h.meta);
         const old_entry = bucket.entries[index];
         // TT replacement policy: Don't let qs entries replace anything important.
-        if (old_entry.bound != .empty and old_entry.fragment != new_entry.fragment and new_entry.depth == 0 and old_entry.depth > 0) return;
+        if (new_entry.depth == 0 and old_entry.depth > 0) return;
         bucket.entries[index] = new_entry;
     } else {
         const index = bucket.newIndex();
