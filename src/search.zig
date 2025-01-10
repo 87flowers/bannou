@@ -123,7 +123,7 @@ pub const DepthControl = Control(.{ .depth = true });
 
 fn search2(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, ply: u32, depth: i32, comptime mode: SearchMode) SearchError!Score {
     return if (mode != .quiescence and depth <= 0)
-        try search(game, ctrl, pv, alpha, beta, ply, depth, .quiescence)
+        try search(game, ctrl, line.Null{}, alpha, beta, ply, depth, .quiescence)
     else if (mode == .firstply)
         try search(game, ctrl, pv, alpha, beta, ply, depth, .normal)
     else
@@ -153,7 +153,11 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
         .upper => tte.score <= alpha,
     }) {
         ctrl.trackTtPrune(mode);
-        pv.write(tte.move(), &.{});
+        if (tte.bound == .upper) {
+            pv.writeEmpty();
+        } else {
+            pv.write(tte.move(), &.{});
+        }
         return tte.score;
     }
 
@@ -220,7 +224,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
                 // - With a "pruneable" flag set (the .nullmove mode)
                 // - Depth reduced by 1
                 const nmr_reduction = 1 + @divTrunc(depth, 6);
-                return search(game, ctrl, line.Null{}, alpha, beta, ply, depth - nmr_reduction, .nullmove);
+                return search(game, ctrl, pv, alpha, beta, ply, depth - nmr_reduction, .nullmove);
             }
         }
     }
@@ -268,14 +272,14 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
                     }
                     const r = std.math.clamp(reduction, 1, depth - 1);
                     if (r > 1) {
-                        const lmr_score = -try search2(game, ctrl, &child_pv, -a - 1, -a, ply + 1, depth - r, mode);
+                        const lmr_score = -try search2(game, ctrl, line.Null{}, -a - 1, -a, ply + 1, depth - r, mode);
                         if (lmr_score <= a) break :blk lmr_score;
                     }
                 }
 
                 // PVS Scout Search
                 if (mode != .quiescence and moves_visited != 0 and is_pv_node) {
-                    const scout_score = -try search2(game, ctrl, &child_pv, -a - 1, -a, ply + 1, depth - 1, mode);
+                    const scout_score = -try search2(game, ctrl, line.Null{}, -a - 1, -a, ply + 1, depth - 1, mode);
                     if (scout_score <= a or scout_score >= beta) break :blk scout_score;
                 }
 
