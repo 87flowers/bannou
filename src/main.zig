@@ -219,9 +219,8 @@ pub fn main() !void {
 
     // Handle stdin
     const buffer_size = common.max_game_ply * 5;
-    var input = std.io.getStdIn().reader();
-    var buffer: [buffer_size]u8 = undefined;
-    while (try input.readUntilDelimiterOrEof(&buffer, '\n')) |input_line| {
+    var input = lineReader(buffer_size, std.io.getStdIn().reader());
+    while (try input.readLine()) |input_line| {
         try uci.uciParseCommand(input_line);
         try uci.out.flush();
     }
@@ -234,6 +233,7 @@ const cmd_perft = @import("cmd_perft.zig");
 const common = @import("common.zig");
 const eval = @import("eval.zig");
 const line = @import("line.zig");
+const lineReader = @import("util/line_reader.zig").lineReader;
 const output = @import("output.zig");
 const search = @import("search.zig");
 const Board = @import("Board.zig");

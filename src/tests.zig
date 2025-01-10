@@ -22,6 +22,7 @@ comptime {
     // util
     _ = @import("util/bch.zig");
     _ = @import("util/bit.zig");
+    _ = @import("util/line_reader.zig");
     _ = @import("util/NullWriter.zig");
     _ = @import("util/polynomial.zig");
 }
