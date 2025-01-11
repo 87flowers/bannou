@@ -280,7 +280,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
                 // PVS Scout Search
                 if (mode != .quiescence and moves_visited != 0 and is_pv_node) {
                     const scout_score = -try search2(game, ctrl, line.Null{}, -a - 1, -a, ply + 1, depth - 1, mode);
-                    if (scout_score <= a or scout_score >= beta) break :blk scout_score;
+                    if (scout_score <= a) break :blk scout_score;
                 }
 
                 break :blk -try search2(game, ctrl, &child_pv, -beta, -a, ply + 1, depth - 1, mode);
@@ -294,9 +294,9 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
 
             if (child_score > best_score) {
                 best_score = child_score;
-                best_move = m.code;
-                best_i = i;
                 if (child_score > alpha) {
+                    best_move = m.code;
+                    best_i = i;
                     pv.write(best_move, &child_pv);
                     if (child_score >= beta) break;
                 }
@@ -309,7 +309,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
         game.recordHistory(depth, &moves, best_i);
     }
 
-    if (best_score == eval.no_moves) {
+    if (mode != .quiescence and moves_visited == 0) {
         pv.writeEmpty();
         if (!is_in_check) {
             return eval.draw;
@@ -320,10 +320,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
     if (eval.isMateScore(best_score)) best_score -= std.math.sign(best_score);
 
     game.ttStore(.{
-        .best_move = if (best_score > alpha or tte.move().isNone())
-            best_move
-        else
-            tte.move(),
+        .best_move = best_move,
         .depth = @intCast(std.math.clamp(depth, 0, 127)),
         .score = best_score,
         .bound = if (best_score >= beta)
