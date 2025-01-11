@@ -3,7 +3,8 @@ const max_history_value: i16 = std.math.maxInt(i16);
 board: Board,
 tt: TT,
 killers: [common.max_game_ply]MoveCode,
-history: [6 * 64 * 64]i16,
+pd_history: [6 * 64]i16,
+sd_history: [64 * 64]i16,
 counter_moves: [2 * 64 * 64]MoveCode,
 
 base_position: Board = Board.defaultBoard(),
@@ -23,7 +24,8 @@ pub fn deinit(self: *Game) void {
 
 pub fn reset(self: *Game) void {
     @memset(&self.killers, MoveCode.none);
-    @memset(&self.history, 0);
+    @memset(&self.pd_history, 0);
+    @memset(&self.sd_history, 0);
     @memset(&self.counter_moves, MoveCode.none);
     @memset(&self.move_history, MoveCode.none);
     self.tt.clear();
@@ -121,7 +123,7 @@ pub fn sortMoves(self: *Game, moves: *MoveList, tt_move: MoveCode) void {
                 break :blk @as(i32, 123 << 24) + 1;
             if (m.code.code == counter_move.code)
                 break :blk @as(i32, 123 << 24) + 0;
-            break :blk self.getHistory(m).*;
+            break :blk self.getHistoryMoveScore(m);
         };
     }
     moves.sortInOrder(&sort_scores);
@@ -151,16 +153,28 @@ fn updateCounter(self: *Game, m: Move) void {
     self.counter_moves[index] = m.code;
 }
 
-fn getHistory(self: *Game, m: Move) *i16 {
+fn indexHistory(self: *Game, m: Move) [2]*i16 {
     const ptype: usize = @intFromEnum(m.destPtype()) - 1;
-    return &self.history[ptype * 64 * 64 + m.code.compressedPair()];
+    return .{
+        &self.pd_history[ptype * 64 + m.code.compressedDest()],
+        &self.sd_history[m.code.compressedPair()],
+    };
+}
+
+fn getHistoryMoveScore(self: *Game, m: Move) i32 {
+    var result: i32 = 0;
+    const histories = self.indexHistory(m);
+    for (histories) |h| result += h.*;
+    return result;
 }
 
 fn updateHistory(self: *Game, m: Move, adjustment: i16) void {
-    const h = self.getHistory(m);
+    const histories = self.indexHistory(m);
     const abs_adjustment: i16 = @intCast(@abs(adjustment));
-    const grav: i16 = @intCast(@divTrunc(@as(i32, h.*) * abs_adjustment, max_history_value));
-    h.* += adjustment - grav;
+    for (histories) |h| {
+        const grav: i16 = @intCast(@divTrunc(@as(i32, h.*) * abs_adjustment, max_history_value));
+        h.* += adjustment - grav;
+    }
 }
 
 pub fn recordHistory(self: *Game, depth: i32, moves: *const MoveList, i: usize) void {
