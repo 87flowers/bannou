@@ -246,10 +246,17 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
         const old_state = game.move(m);
         defer game.unmove(m, old_state);
         if (game.board.isValid()) {
-            // Late Move Pruning
-            if (mode != .quiescence and !m.isTactical() and !is_pv_node) {
+            const a = @max(alpha, best_score);
+
+            if (mode != .quiescence and !m.isTactical() and !is_pv_node and !is_in_check) {
+                // Late Move Pruning
                 const lmp_threshold = 2 + (depth << 2);
-                if (!is_in_check and quiets_visited > lmp_threshold) {
+                if (quiets_visited > lmp_threshold) {
+                    break;
+                }
+
+                // Futility pruning
+                if (quiets_visited > 2 and static_eval +| 100 + 80 * depth < a and !eval.isMated(best_score)) {
                     break;
                 }
             }
@@ -257,8 +264,6 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
             var child_pv = pv.newChild();
             const child_score = blk: {
                 if (game.board.isRepeatedPosition() or game.board.is50MoveExpired()) break :blk 0;
-
-                const a = @max(alpha, best_score);
 
                 // Late move reductions
                 if (mode != .quiescence and quiets_visited > 2 and depth > 2) {
