@@ -169,7 +169,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
         .exact => true,
         .upper => tte.score <= first_static_eval,
     })
-        tte.score
+        eval.clampScore(tte.score)
     else
         first_static_eval;
 
@@ -194,7 +194,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
     if (is_in_check) depth += 1;
 
     // Pruning
-    if (!is_pv_node and !is_in_check) {
+    if (!is_pv_node and !is_in_check and !eval.isMateScore(tte.score)) {
         // Reverse futility pruning
         if (mode != .quiescence and static_eval -| depth * 100 > beta) {
             ctrl.trackRfp(mode);
@@ -217,8 +217,9 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
                     // Failed high twice, actually prune
                     pv.writeEmpty();
                     // Do not return mate scores
-                    return if (eval.isMateScore(null_score)) beta else null_score;
+                    return eval.clampScore(null_score);
                 }
+
                 // Null-move reduction
                 // This is the same as a normal search except:
                 // - With a "pruneable" flag set (the .nullmove mode)
