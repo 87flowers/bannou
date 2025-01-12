@@ -248,7 +248,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
         if (game.board.isValid()) {
             const a = @max(alpha, best_score);
 
-            if (mode != .quiescence and !m.isTactical() and !is_pv_node and !is_in_check) {
+            if (mode != .quiescence and !m.isTactical() and !is_pv_node and !is_in_check and !eval.isMated(best_score)) {
                 // Late Move Pruning
                 const lmp_threshold = 2 + (depth << 2);
                 if (quiets_visited > lmp_threshold) {
@@ -256,7 +256,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
                 }
 
                 // Futility pruning
-                if (quiets_visited > 2 and static_eval +| 100 + 80 * depth < a and !eval.isMated(best_score)) {
+                if (quiets_visited > 2 and static_eval +| 100 + 80 * depth < a) {
                     break;
                 }
             }
