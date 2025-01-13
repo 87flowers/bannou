@@ -1,4 +1,4 @@
-pub const LineReaderError = error{ BufferTooSmall };
+pub const LineReaderError = error{BufferTooSmall};
 
 pub fn LineReader(comptime buffer_size: usize, comptime ReaderType: type) type {
     return struct {
