@@ -18,6 +18,7 @@ comptime {
     _ = @import("search.zig");
     _ = @import("State.zig");
     _ = @import("TT.zig");
+    _ = @import("window.zig");
     _ = @import("zhash.zig");
     // util
     _ = @import("util/bch.zig");
