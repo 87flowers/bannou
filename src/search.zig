@@ -256,7 +256,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, alpha: Score, beta: Score, pl
                 }
 
                 // Futility pruning
-                if (quiets_visited > 2 and static_eval +| 100 + 80 * depth < a and !eval.isMated(best_score)) {
+                if (quiets_visited > 2 and static_eval +| (100 + 80 * depth) < a and !eval.isMated(best_score)) {
                     break;
                 }
             }
