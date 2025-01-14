@@ -3,7 +3,7 @@ const max_history_value: i16 = std.math.maxInt(i16);
 board: Board,
 tt: TT,
 killers: [common.max_game_ply]MoveCode,
-history: [6 * 64 * 64]i16,
+history: [2 * 6 * 64 * 64]i16,
 counter_moves: [2 * 64 * 64]MoveCode,
 
 base_position: Board = Board.defaultBoard(),
@@ -153,7 +153,7 @@ fn updateCounter(self: *Game, m: Move) void {
 
 fn getHistory(self: *Game, m: Move) *i16 {
     const ptype: usize = @intFromEnum(m.destPtype()) - 1;
-    return &self.history[ptype * 64 * 64 + m.code.compressedPair()];
+    return &self.history[ptype * 64 * 64 * 2 + m.code.compressedPair() * 2 + @intFromEnum(self.board.active_color)];
 }
 
 fn updateHistory(self: *Game, m: Move, adjustment: i16) void {
@@ -175,7 +175,7 @@ pub fn recordHistory(self: *Game, depth: i32, moves: *const MoveList, i: usize) 
     }
 
     if (!m.isCapture()) {
-        const adjustment: i16 = @intCast(depth * 100 - 30);
+        const adjustment: i16 = @intCast(depth * 100 - 70);
 
         // History penalty
         for (moves.moves[0..i]) |badm| {
