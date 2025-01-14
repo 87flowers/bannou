@@ -175,7 +175,7 @@ pub fn recordHistory(self: *Game, depth: i32, moves: *const MoveList, i: usize) 
     }
 
     if (!m.isCapture()) {
-        const adjustment: i16 = @intCast(depth * 100 - 30);
+        const adjustment: i16 = @intCast(depth * 100 - 70);
 
         // History penalty
         for (moves.moves[0..i]) |badm| {
