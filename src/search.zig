@@ -371,6 +371,7 @@ fn forDepth(game: *Game, ctrl: anytype, pv: anytype, depth: i32, prev_score: Sco
 
 pub fn go(out: anytype, game: *Game, ctrl: anytype, pv: anytype) !Score {
     // comptime assert(@typeInfo(@TypeOf(ctrl)) == .pointer and @typeInfo(@TypeOf(pv)) == .pointer);
+    game.tt.incrementAge();
     var depth: i32 = 1;
     var score: Score = undefined;
     var current_pv = pv.new();
