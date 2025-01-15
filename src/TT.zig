@@ -73,26 +73,26 @@ inline fn decomposeHash(self: *TT, hash: Hash) struct { bucket_index: usize, met
 }
 
 const Bucket = struct {
-    const Metas = @Vector(16, u8);
+    const Metas = @Vector(8, u8);
 
     metas: Metas,
-    entries: [14]Entry,
+    entries: [7]Entry,
 
     fn getIndex(self: *Bucket, meta: u8) ?usize {
-        const matches: u16 = @bitCast(self.metas == @as(Metas, @splat(meta)));
+        const matches: u8 = @bitCast(self.metas == @as(Metas, @splat(meta)));
         const index = @ctz(matches);
         return if (index < self.entries.len) index else null;
     }
 
     fn newIndex(self: *Bucket) usize {
-        const i = (self.metas[15] + 1) % 14;
-        self.metas[15] = i;
+        const i = (self.metas[7] + 1) % 7;
+        self.metas[7] = i;
         return i;
     }
 };
 
 test Bucket {
-    comptime assert(@sizeOf(Bucket) == 128);
+    comptime assert(@sizeOf(Bucket) == 64);
 }
 
 pub const Entry = packed struct(u64) {
