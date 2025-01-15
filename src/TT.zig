@@ -85,9 +85,16 @@ const Bucket = struct {
     }
 
     fn newIndex(self: *Bucket) usize {
-        const i = (self.metas[15] + 1) % 14;
-        self.metas[15] = i;
-        return i;
+        var victim: usize = 0;
+        var depth: u7 = self.entries[0].depth;
+        for (0..14) |i| {
+            if (self.entries[i].isEmpty()) return i;
+            if (self.entries[i].depth < depth) {
+                depth = self.entries[i].depth;
+                victim = i;
+            }
+        }
+        return victim;
     }
 };
 
