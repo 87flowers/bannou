@@ -153,7 +153,7 @@ fn updateCounter(self: *Game, m: Move) void {
 
 fn getHistory(self: *Game, m: Move) *i16 {
     const ptype: usize = @intFromEnum(m.destPtype()) - 1;
-    return &self.history[ptype * 64 * 64 * 2 + m.code.compressedPair() * 2 + @intFromEnum(self.board.active_color)];
+    return &self.history[ptype * 64 * 64 * 2 + @as(usize, m.code.compressedPair()) * 2 + @intFromEnum(self.board.active_color)];
 }
 
 fn updateHistory(self: *Game, m: Move, adjustment: i16) void {
