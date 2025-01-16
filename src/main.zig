@@ -197,6 +197,7 @@ pub fn main() !void {
     const allocator = gpa.allocator();
 
     g = try Game.init(allocator);
+    g.reset();
     defer g.deinit();
 
     var uci = Uci{ .out = output.Uci.init(std.io.bufferedWriter(std.io.getStdOut().writer())) };
