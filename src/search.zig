@@ -250,7 +250,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, w: anytype, ply: u32, depth_a
 
             if (mode != .quiescence and !m.isTactical() and !is_pv_node and !is_in_check) {
                 // Late Move Pruning
-                const lmp_threshold = 2 + (depth << 2);
+                const lmp_threshold = 2 + depth * depth;
                 if (quiets_visited > lmp_threshold) {
                     break;
                 }
