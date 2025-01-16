@@ -202,7 +202,7 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, w: anytype, ply: u32, depth_a
         }
 
         // Null-move reduction and pruning
-        if ((mode == .normal or mode == .nullmove) and depth > 2 and !game.prevMove().isNone()) {
+        if ((mode == .normal or mode == .nullmove) and depth > 2 and !game.prevMoveCode().isNone()) {
             ctrl.trackNmrAttempt(mode);
 
             const old_state = game.moveNull();

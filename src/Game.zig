@@ -4,10 +4,10 @@ board: Board,
 tt: TT,
 killers: [common.max_game_ply]MoveCode,
 history: [6 * 64 * 64]i16,
-counter_moves: [2 * 64 * 64 * 64 * 64]i16,
+counter_moves: [2 * 6 * 64 * 6 * 64]i16,
 
 base_position: Board = Board.defaultBoard(),
-move_history: [common.max_game_ply]MoveCode,
+move_history: [common.max_game_ply]struct { ptype: PieceType, code: MoveCode },
 move_history_len: usize,
 
 pub fn init(allocator: std.mem.Allocator) !Game {
@@ -25,7 +25,7 @@ pub fn reset(self: *Game) void {
     @memset(&self.killers, MoveCode.none);
     @memset(&self.history, 0);
     @memset(&self.counter_moves, 0);
-    @memset(&self.move_history, MoveCode.none);
+    @memset(&self.move_history, .{ .ptype = .none, .code = MoveCode.none });
     self.tt.clear();
     self.setPositionDefault();
 }
@@ -43,40 +43,49 @@ pub fn setPosition(self: *Game, pos: Board) void {
 }
 
 pub fn move(self: *Game, m: Move) State {
-    self.move_history[self.move_history_len] = m.code;
+    self.move_history[self.move_history_len] = .{ .ptype = m.src_place.ptype, .code = m.code };
     self.move_history_len += 1;
     return self.board.move(m);
 }
 
 pub fn makeMoveByCode(self: *Game, code: MoveCode) bool {
+    const ptype = self.board.board[code.src()].ptype;
     if (!self.board.makeMoveByCode(code))
         return false;
-    self.move_history[self.move_history_len] = code;
+    self.move_history[self.move_history_len] = .{ .ptype = ptype, .code = code };
     self.move_history_len += 1;
     return true;
 }
 
 pub fn unmove(self: *Game, m: Move, old_state: State) void {
-    assert(self.move_history[self.move_history_len - 1].code == m.code.code);
+    assert(self.move_history[self.move_history_len - 1].code.code == m.code.code);
     self.move_history_len -= 1;
     self.board.unmove(m, old_state);
 }
 
 pub fn moveNull(self: *Game) State {
-    self.move_history[self.move_history_len] = MoveCode.none;
+    self.move_history[self.move_history_len] = .{ .ptype = .none, .code = MoveCode.none };
     self.move_history_len += 1;
     return self.board.moveNull();
 }
 
 pub fn unmoveNull(self: *Game, old_state: State) void {
-    assert(self.move_history[self.move_history_len - 1].code == MoveCode.none.code);
+    assert(self.move_history[self.move_history_len - 1].code.code == MoveCode.none.code);
     self.move_history_len -= 1;
     self.board.unmoveNull(old_state);
 }
 
-pub fn prevMove(self: *Game) MoveCode {
+pub fn prevMoveCode(self: *Game) MoveCode {
     if (self.move_history_len == 0) return MoveCode.none;
-    return self.move_history[self.move_history_len - 1];
+    return self.move_history[self.move_history_len - 1].code;
+}
+
+pub fn prevMovePD(self: *Game) usize {
+    if (self.move_history_len == 0) return 0;
+    const prev_move = self.move_history[self.move_history_len - 1];
+    const ptype: usize = @intFromEnum(prev_move.ptype) -| 1;
+    const dest: usize = prev_move.code.compressedDest();
+    return ptype * 64 + dest;
 }
 
 pub fn undoAndReplay(self: *Game, plys: usize) bool {
@@ -84,8 +93,8 @@ pub fn undoAndReplay(self: *Game, plys: usize) bool {
         return false;
     self.move_history_len -= plys;
     self.board.copyFrom(&self.base_position);
-    for (self.move_history[0..self.move_history_len]) |code| {
-        _ = self.board.makeMoveByCode(code);
+    for (self.move_history[0..self.move_history_len]) |m| {
+        _ = self.board.makeMoveByCode(m.code);
     }
     return true;
 }
@@ -140,10 +149,12 @@ fn getHistoryPointers(self: *Game, m: Move) [2]*i16 {
     const ptype: usize = @intFromEnum(m.destPtype()) - 1;
     const color: usize = @intFromEnum(self.board.active_color);
     const proposed_move: usize = m.code.compressedPair();
-    const prev_move: usize = self.prevMove().compressedPair();
+    const proposed_ptype: usize = @intFromEnum(m.src_place.ptype) -| 1;
+    const proposed_dest: usize = m.code.compressedDest();
+    const prev_move_pd: usize = self.prevMovePD();
     return .{
         &self.history[ptype * 64 * 64 + proposed_move],
-        &self.counter_moves[color * 64 * 64 * 64 * 64 + prev_move * 64 * 64 + proposed_move],
+        &self.counter_moves[color * 6 * 64 * 6 * 64 + prev_move_pd * 6 * 64 + proposed_ptype * 64 + proposed_dest],
     };
 }
 
@@ -178,7 +189,7 @@ pub fn recordHistory(self: *Game, depth: i32, moves: *const MoveList, i: usize) 
     if (!m.isCapture()) {
         const adjustments: [2]i32 = .{
             depth * 100 - 30,
-            depth * 1000 - 300,
+            depth * 100 - 30,
         };
 
         // History penalty
