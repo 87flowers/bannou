@@ -5,6 +5,7 @@ tt: TT,
 killers: [common.max_game_ply]MoveCode,
 history: [6 * 64 * 64]i16,
 counter_moves: [2 * 64 * 64 * 64 * 64]i16,
+follow_up: [2 * 64 * 64 * 64 * 64]i16,
 
 base_position: Board = Board.defaultBoard(),
 move_history: [common.max_game_ply]MoveCode,
@@ -14,6 +15,7 @@ pub fn reset(self: *Game) void {
     @memset(&self.killers, MoveCode.none);
     @memset(&self.history, 0);
     @memset(&self.counter_moves, 0);
+    @memset(&self.follow_up, 0);
     @memset(&self.move_history, MoveCode.none);
     self.tt.clear();
     self.setPositionDefault();
@@ -66,6 +68,11 @@ pub fn unmoveNull(self: *Game, old_state: State) void {
 pub fn prevMove(self: *Game) MoveCode {
     if (self.move_history_len == 0) return MoveCode.none;
     return self.move_history[self.move_history_len - 1];
+}
+
+pub fn prevPrevMove(self: *Game) MoveCode {
+    if (self.move_history_len < 2) return MoveCode.none;
+    return self.move_history[self.move_history_len - 2];
 }
 
 pub fn undoAndReplay(self: *Game, plys: usize) bool {
@@ -125,19 +132,21 @@ fn updateKiller(self: *Game, m: Move) void {
     self.killers[self.move_history_len] = m.code;
 }
 
-fn getHistoryPointers(self: *Game, m: Move) [2]*i16 {
+fn getHistoryPointers(self: *Game, m: Move) [3]*i16 {
     const ptype: usize = @intFromEnum(m.destPtype()) - 1;
     const color: usize = @intFromEnum(self.board.active_color);
     const proposed_move: usize = m.code.compressedPair();
     const prev_move: usize = self.prevMove().compressedPair();
+    const prev_prev_move: usize = self.prevPrevMove().compressedPair();
     return .{
         &self.history[ptype * 64 * 64 + proposed_move],
         &self.counter_moves[color * 64 * 64 * 64 * 64 + prev_move * 64 * 64 + proposed_move],
+        &self.follow_up[color * 64 * 64 * 64 * 64 + prev_prev_move * 64 * 64 + proposed_move],
     };
 }
 
 fn getHistory(self: *Game, m: Move) i32 {
-    const weights: [2]i32 = .{ 1, 1 };
+    const weights: [3]i32 = .{ 1, 1, 1 };
     const history = self.getHistoryPointers(m);
     var result: i32 = 0;
     for (history, weights) |h, w| {
@@ -146,7 +155,7 @@ fn getHistory(self: *Game, m: Move) i32 {
     return result;
 }
 
-fn updateHistory(self: *Game, m: Move, adjustments: [2]i32, sign: i16) void {
+fn updateHistory(self: *Game, m: Move, adjustments: [3]i32, sign: i16) void {
     const history = self.getHistoryPointers(m);
     for (history, adjustments) |h, adj_unsat| {
         const adj: i32 = std.math.clamp(adj_unsat, -10000, 10000);
@@ -165,8 +174,9 @@ pub fn recordHistory(self: *Game, depth: i32, moves: *const MoveList, i: usize) 
     }
 
     if (!m.isCapture()) {
-        const adjustments: [2]i32 = .{
+        const adjustments: [3]i32 = .{
             depth * 100 - 30,
+            depth * 1000 - 300,
             depth * 1000 - 300,
         };
 
