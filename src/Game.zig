@@ -4,7 +4,7 @@ board: Board,
 tt: TT,
 killers: [common.max_game_ply]MoveCode,
 history: [6 * 64 * 64]i16,
-counter_moves: [2 * 64 * 64]MoveCode,
+counter_moves: [2 * 64 * 64 * 64 * 64]i16,
 
 base_position: Board = Board.defaultBoard(),
 move_history: [common.max_game_ply]MoveCode,
@@ -24,7 +24,7 @@ pub fn deinit(self: *Game) void {
 pub fn reset(self: *Game) void {
     @memset(&self.killers, MoveCode.none);
     @memset(&self.history, 0);
-    @memset(&self.counter_moves, MoveCode.none);
+    @memset(&self.counter_moves, 0);
     @memset(&self.move_history, MoveCode.none);
     self.tt.clear();
     self.setPositionDefault();
@@ -105,7 +105,6 @@ pub fn ttStore(self: *Game, arg: struct {
 
 pub fn sortMoves(self: *Game, moves: *MoveList, tt_move: MoveCode) void {
     const killer = self.getKiller();
-    const counter_move = self.getCounter();
 
     var sort_scores: [common.max_legal_moves]i32 = undefined;
     for (0..moves.size) |i| {
@@ -119,9 +118,7 @@ pub fn sortMoves(self: *Game, moves: *MoveList, tt_move: MoveCode) void {
                 break :blk @as(i32, 124 << 24);
             if (m.code.code == killer.code)
                 break :blk @as(i32, 123 << 24) + 1;
-            if (m.code.code == counter_move.code)
-                break :blk @as(i32, 123 << 24) + 0;
-            break :blk self.getHistory(m).*;
+            break :blk self.getHistory(m);
         };
     }
     moves.sortInOrder(&sort_scores);
@@ -139,54 +136,60 @@ fn updateKiller(self: *Game, m: Move) void {
     self.killers[self.move_history_len] = m.code;
 }
 
-fn getCounter(self: *Game) MoveCode {
-    const index = @as(usize, self.prevMove().compressedPair()) +
-        @as(usize, @intFromEnum(self.board.active_color)) * 64 * 64;
-    return self.counter_moves[index];
-}
-
-fn updateCounter(self: *Game, m: Move) void {
-    const index = @as(usize, self.prevMove().compressedPair()) +
-        @as(usize, @intFromEnum(self.board.active_color)) * 64 * 64;
-    self.counter_moves[index] = m.code;
-}
-
-fn getHistory(self: *Game, m: Move) *i16 {
+fn getHistoryPointers(self: *Game, m: Move) [2]*i16 {
     const ptype: usize = @intFromEnum(m.destPtype()) - 1;
-    return &self.history[ptype * 64 * 64 + m.code.compressedPair()];
+    const color: usize = @intFromEnum(self.board.active_color);
+    const proposed_move: usize = m.code.compressedPair();
+    const prev_move: usize = self.prevMove().compressedPair();
+    return .{
+        &self.history[ptype * 64 * 64 + proposed_move],
+        &self.counter_moves[color * 64 * 64 * 64 * 64 + prev_move * 64 * 64 + proposed_move],
+    };
 }
 
-fn updateHistory(self: *Game, m: Move, adjustment: i16) void {
-    const h = self.getHistory(m);
-    const abs_adjustment: i16 = @intCast(@abs(adjustment));
-    const grav: i16 = @intCast(@divTrunc(@as(i32, h.*) * abs_adjustment, max_history_value));
-    h.* += adjustment - grav;
+fn getHistory(self: *Game, m: Move) i32 {
+    const weights: [2]i32 = .{ 1, 1 };
+    const history = self.getHistoryPointers(m);
+    var result: i32 = 0;
+    for (history, weights) |h, w| {
+        result += w * h.*;
+    }
+    return result;
+}
+
+fn updateHistory(self: *Game, m: Move, adjustments: [2]i32, sign: i16) void {
+    const history = self.getHistoryPointers(m);
+    for (history, adjustments) |h, adj_unsat| {
+        const adj: i32 = std.math.clamp(adj_unsat, -max_history_value, max_history_value);
+        const grav: i16 = @intCast(@divTrunc(@as(i32, h.*) * adj, max_history_value));
+        h.* += @intCast(adj * sign - grav);
+    }
 }
 
 pub fn recordHistory(self: *Game, depth: i32, moves: *const MoveList, i: usize) void {
     const m = moves.moves[i];
     const old_killer = self.getKiller();
-    const old_counter = self.getCounter();
 
     // Record killer move
     if (!m.isTactical()) {
         self.updateKiller(m);
-        self.updateCounter(m);
     }
 
     if (!m.isCapture()) {
-        const adjustment: i16 = @intCast(depth * 100 - 30);
+        const adjustments: [2]i32 = .{
+            depth * 100 - 30,
+            depth * 1000 - 300,
+        };
 
         // History penalty
         for (moves.moves[0..i]) |badm| {
             if (badm.isCapture() or (m.isPromotion() and m.destPtype() == .q)) continue;
             if (badm.code.code == old_killer.code) continue;
-            if (badm.code.code == old_counter.code) continue;
-            self.updateHistory(badm, -adjustment);
+            self.updateHistory(badm, adjustments, -1);
         }
 
         // History bonus
-        self.updateHistory(m, adjustment);
+        self.updateHistory(m, adjustments, 1);
     }
 }
 
