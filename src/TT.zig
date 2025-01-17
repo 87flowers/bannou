@@ -1,6 +1,5 @@
 pub const default_tt_size_mb = 16;
 
-current_age: Entry.Age,
 buckets: []Bucket,
 allocator: std.mem.Allocator,
 
@@ -11,7 +10,6 @@ fn bucketsFromMb(mb: usize) usize {
 pub fn init(allocator: std.mem.Allocator) !TT {
     const n = comptime bucketsFromMb(default_tt_size_mb);
     return .{
-        .current_age = 0,
         .allocator = allocator,
         .buckets = try allocator.alloc(Bucket, n),
     };
@@ -33,10 +31,6 @@ pub fn clear(self: *TT) void {
     @memset(self.buckets, std.mem.zeroes(Bucket));
 }
 
-pub fn incrementAge(self: *TT) void {
-    self.current_age +%= 1;
-}
-
 pub fn load(self: *TT, hash: Hash) Entry {
     const h = self.decomposeHash(hash);
     const bucket: *Bucket = &self.buckets[h.bucket_index];
@@ -55,7 +49,6 @@ pub fn store(self: *TT, hash: Hash, depth: u7, best_move: MoveCode, bound: Bound
         .raw_move_code = @intCast(best_move.code),
         .bound = bound,
         .score = score,
-        .age = self.current_age,
     };
     if (bucket.getIndex(h.meta)) |index| {
         assert(bucket.metas[index] == h.meta);
@@ -64,7 +57,7 @@ pub fn store(self: *TT, hash: Hash, depth: u7, best_move: MoveCode, bound: Bound
         if (new_entry.depth == 0 and old_entry.depth > 0) return;
         bucket.entries[index] = new_entry;
     } else {
-        const index = bucket.newIndex(self.current_age);
+        const index = bucket.newIndex();
         bucket.metas[index] = h.meta;
         bucket.entries[index] = new_entry;
     }
@@ -91,18 +84,10 @@ const Bucket = struct {
         return if (index < self.entries.len) index else null;
     }
 
-    fn newIndex(self: *Bucket, current_age: Entry.Age) usize {
-        var victim: usize = 0;
-        var worst_age_delta = current_age -% self.entries[0].age;
-        for (0..14) |i| {
-            if (self.entries[i].isEmpty()) return i;
-            const age_delta = current_age -% self.entries[i].age;
-            if (age_delta > worst_age_delta) {
-                worst_age_delta = age_delta;
-                victim = i;
-            }
-        }
-        return victim;
+    fn newIndex(self: *Bucket) usize {
+        const i = (self.metas[15] + 1) % 14;
+        self.metas[15] = i;
+        return i;
     }
 };
 
@@ -111,15 +96,13 @@ test Bucket {
 }
 
 pub const Entry = packed struct(u64) {
-    pub const Fragment = u21;
-    pub const Age = u5;
+    pub const Fragment = u26;
 
     depth: u7,
     raw_move_code: u15,
     bound: Bound,
     score: Score,
     fragment: Fragment,
-    age: Age,
 
     pub const empty: Entry = @bitCast(@as(u64, 0));
     pub fn isEmpty(entry: Entry) bool {
