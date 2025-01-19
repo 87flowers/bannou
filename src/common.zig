@@ -1,6 +1,6 @@
 pub const max_game_ply = 1024;
 pub const max_legal_moves = 256;
-pub const max_search_ply = 256;
+pub const max_search_ply = 128;
 
 pub const ParseError = error{
     InvalidChar,

@@ -1,3 +1,16 @@
+pub const Null = struct {
+    pub inline fn raw(_: Null, comptime _: []const u8, _: anytype) !void {}
+    pub inline fn flush(_: Null) !void {}
+    pub fn protocolError(_: Null, _: []const u8, comptime _: []const u8, _: anytype) !void {}
+    pub fn unrecognisedToken(_: Null, comptime _: []const u8, _: []const u8) !void {}
+    pub fn illegalMoveString(_: Null, _: []const u8) !void {}
+    pub fn illegalMove(_: Null, _: MoveCode) !void {}
+    pub inline fn pong(_: Null) !void {}
+    pub inline fn bestmove(_: Null, _: ?MoveCode) !void {}
+    pub inline fn eval(_: Null, _: Score) !void {}
+    pub inline fn info(_: Null, _: i32, _: Score, _: anytype, _: anytype, comptime _: enum { normal, early_termination }) !void {}
+};
+
 pub const Uci = struct {
     writer: std.io.BufferedWriter(4096, std.fs.File.Writer),
 

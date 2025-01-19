@@ -385,12 +385,12 @@ pub fn isValid(self: *Board) bool {
     return !self.isAttacked(self.where[king_id], move_color);
 }
 
-pub fn isInCheck(self: *Board) bool {
+pub fn isInCheck(self: *const Board) bool {
     const king_id = self.active_color.idBase();
     return self.isAttacked(self.where[king_id], self.active_color);
 }
 
-pub fn isAttacked(self: *Board, target: u8, friendly: Color) bool {
+pub fn isAttacked(self: *const Board, target: u8, friendly: Color) bool {
     const enemy_color = friendly.invert();
     const id_base = enemy_color.idBase();
     for (0..16) |id_index| {
@@ -409,7 +409,7 @@ pub fn isAttacked(self: *Board, target: u8, friendly: Color) bool {
     return false;
 }
 
-fn isVisibleBySlider(self: *Board, comptime dirs: anytype, src: u8, dest: u8) bool {
+fn isVisibleBySlider(self: *const Board, comptime dirs: anytype, src: u8, dest: u8) bool {
     const lut = comptime blk: {
         var l = [1]u8{0} ** 256;
         for (dirs) |dir| {
@@ -429,6 +429,21 @@ fn isVisibleBySlider(self: *Board, comptime dirs: anytype, src: u8, dest: u8) bo
     return true;
 }
 
+pub fn isMoveCodeTactical(self: *const Board, code: MoveCode) bool {
+    if (!self.board[code.dest()].isEmpty()) return true;
+    if (code.dest() == self.state.enpassant) return true;
+    if (code.isPromotion()) return true;
+    return false;
+}
+
+pub fn pieceCount(self: *const Board) usize {
+    var result: usize = 0;
+    for (self.pieces) |p| {
+        if (p != .none) result += 1;
+    }
+    return result;
+}
+
 pub fn calcHashSlow(self: *const Board) Hash {
     var result: Hash = 0;
     for (0..32) |i| {
@@ -440,6 +455,22 @@ pub fn calcHashSlow(self: *const Board) Hash {
     result ^= zhash.castle(self.state.castle);
     if (self.active_color == .black) result ^= zhash.move;
     return result;
+}
+
+pub fn countRepetitions(self: *Board) usize {
+    var i: u16 = self.state.ply - self.state.no_capture_clock;
+    i += @intFromEnum(self.active_color.invert());
+    i &= ~@as(u16, 1);
+    i += @intFromEnum(self.active_color);
+
+    var count: usize = 0;
+
+    while (i + 4 <= self.state.ply) : (i += 2) {
+        if (self.zhistory[i] == self.state.hash) {
+            count += 1;
+        }
+    }
+    return count;
 }
 
 pub fn isRepeatedPosition(self: *Board) bool {

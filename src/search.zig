@@ -64,7 +64,6 @@ pub fn Control(comptime config: struct {
         /// Raises SearchError.EarlyTermination if we should terminate the search
         pub fn checkHardTermination(self: *@This(), comptime mode: SearchMode, depth: i32) SearchError!void {
             if (config.time and mode == .normal and depth > 3 and self.time_limit.hard_deadline <= self.timer.read()) return SearchError.EarlyTermination;
-            if (config.nodes and self.nodes >= self.nodes_limit.target_nodes) return SearchError.EarlyTermination;
         }
 
         pub fn trackTtPrune(self: *@This(), mode: SearchMode) void {
@@ -137,6 +136,9 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, w: anytype, ply: u32, depth_a
     if (mode != .quiescence) assert(depth > 0);
     if (mode == .quiescence) assert(depth <= 0);
 
+    // Maximum search depth
+    if (ply >= common.max_search_ply) return if (game.board.isInCheck()) 0 else eval.eval(game);
+
     try ctrl.checkHardTermination(mode, depth);
 
     // Are we on a PV node?
@@ -205,10 +207,13 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, w: anytype, ply: u32, depth_a
         if ((mode == .normal or mode == .nullmove) and depth > 2 and !game.prevMove().isNone()) {
             ctrl.trackNmrAttempt(mode);
 
-            const old_state = game.moveNull();
-            const nws_reduction = 4 + @divTrunc(depth, 6);
-            const null_score = -try search2(game, ctrl, line.Null{}, window.above(w.beta()), ply + 1, depth - nws_reduction, .normal);
-            game.unmoveNull(old_state);
+            const null_score = blk: {
+                const old_state = game.moveNull();
+                defer game.unmoveNull(old_state);
+
+                const nws_reduction = 4 + @divTrunc(depth, 6);
+                break :blk -try search2(game, ctrl, line.Null{}, window.above(w.beta()), ply + 1, depth - nws_reduction, .normal);
+            };
 
             if (null_score >= w.beta()) {
                 ctrl.trackNmrSuccess(mode);
@@ -353,7 +358,7 @@ fn forDepth(game: *Game, ctrl: anytype, pv: anytype, depth: i32, prev_score: Sco
         var delta: Score = 25;
         var lower = @max(min_window, prev_score -| delta);
         var upper = @min(max_window, prev_score +| delta);
-        while (true) : (delta *= 2) {
+        while (true) : (delta *|= 2) {
             score = try search(game, ctrl, pv, window.window(lower, upper), 0, depth, .firstply);
             if (score <= lower) {
                 lower = @max(min_window, score -| delta);

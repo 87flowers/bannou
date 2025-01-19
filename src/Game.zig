@@ -10,17 +10,6 @@ base_position: Board = Board.defaultBoard(),
 move_history: [common.max_game_ply]MoveCode,
 move_history_len: usize,
 
-pub fn init(allocator: std.mem.Allocator) !Game {
-    var self: Game = undefined;
-    self.tt = try TT.init(allocator);
-    self.reset();
-    return self;
-}
-
-pub fn deinit(self: *Game) void {
-    self.tt.deinit();
-}
-
 pub fn reset(self: *Game) void {
     @memset(&self.killers, MoveCode.none);
     @memset(&self.history, 0);
@@ -160,7 +149,7 @@ fn getHistory(self: *Game, m: Move) i32 {
 fn updateHistory(self: *Game, m: Move, adjustments: [2]i32, sign: i16) void {
     const history = self.getHistoryPointers(m);
     for (history, adjustments) |h, adj_unsat| {
-        const adj: i32 = std.math.clamp(adj_unsat, -max_history_value, max_history_value);
+        const adj: i32 = std.math.clamp(adj_unsat, -10000, 10000);
         const grav: i16 = @intCast(@divTrunc(@as(i32, h.*) * adj, max_history_value));
         h.* += @intCast(adj * sign - grav);
     }
