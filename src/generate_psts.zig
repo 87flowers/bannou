@@ -1,34 +1,39 @@
 const Case = struct {
     board: Board,
     result: f64,
+    should_filter: bool,
 };
 
-fn parseResult(str: []const u8) f64 {
-    if (std.mem.eql(u8, str, "\"0-1\";")) {
+fn parseResult(str: []const u8) ?f64 {
+    if (std.mem.eql(u8, str, "0-1")) {
         return -1.0;
-    } else if (std.mem.eql(u8, str, "\"1-0\";")) {
+    } else if (std.mem.eql(u8, str, "1-0")) {
         return 1.0;
-    } else if (std.mem.eql(u8, str, "\"1/2-1/2\";")) {
+    } else if (std.mem.eql(u8, str, "1/2-1/2")) {
         return 0.0;
     } else {
-        @panic("failed parseResult");
+        return null;
     }
 }
 
-fn parseCase(str: []const u8) !Case {
+fn parseCase(str: []const u8) ?Case {
     var it = std.mem.tokenizeAny(u8, str, " \t\r\n");
-    const board_str = it.next() orelse @panic("failed parseCase");
-    const color = it.next() orelse @panic("failed parseCase");
-    const castling = it.next() orelse @panic("failed parseCase");
-    const enpassant = it.next() orelse @panic("failed parseCase");
-    _ = it.next() orelse @panic("failed parseCase");
-    const result_str = it.next() orelse @panic("failed parseCase");
-    const no_capture_clock = "0";
-    const ply = "1";
-    if (it.next() != null) @panic("failed parseCase");
+    const board_str = it.next() orelse return null;
+    const color = it.next() orelse return null;
+    const castling = it.next() orelse return null;
+    const enpassant = it.next() orelse return null;
+    const no_capture_clock = it.next() orelse return null;
+    const ply = it.next() orelse return null;
+    _ = it.next() orelse return null; // bar
+    _ = it.next() orelse return null; // bestmove
+    const should_filter = it.next() orelse return null;
+    _ = it.next() orelse return null; // eval
+    const result_str = it.next() orelse return null;
+    if (it.next() != null) return null;
     return .{
-        .board = try Board.parseParts(board_str, color, castling, enpassant, no_capture_clock, ply),
-        .result = parseResult(result_str),
+        .board = Board.parseParts(board_str, color, castling, enpassant, no_capture_clock, ply) catch return null,
+        .result = parseResult(result_str) orelse return null,
+        .should_filter = std.mem.eql(u8, should_filter, "true"),
     };
 }
 
@@ -59,7 +64,9 @@ fn rescaleEval(cp: f64) f64 {
     return 2 * p - 1;
 }
 
-fn featuresFromCase(case: *const Case) FeatureList {
+fn featuresFromCase(case: *const Case) ?FeatureList {
+    if (case.should_filter) return null;
+
     var features = FeatureList{ .result = case.result };
 
     const mg_phase = phaseFromCase(case);
@@ -85,6 +92,21 @@ fn featuresFromCase(case: *const Case) FeatureList {
     }
 
     return features;
+}
+
+pub fn printPsts(coefficients: []f64) void {
+    for ([_]PieceType{ .p, .n, .b, .r, .q, .k }, 0..) |ptype, ptypei| {
+        for ([_][]const u8{ "mg", "eg" }, 0..) |phase, phasei| {
+            std.debug.print("const {c}_{s} = [_]i16{{\n", .{ ptype.toChar(.black), phase });
+            for (0..64) |where| {
+                if (where % 8 == 0) std.debug.print("    ", .{});
+                const index = (ptypei << 7) + (where << 1) + phasei;
+                std.debug.print("{}, ", .{@as(i16, @intFromFloat(coefficients[index]))});
+                if (where % 8 == 7) std.debug.print("\n", .{});
+            }
+            std.debug.print("}};\n\n", .{});
+        }
+    }
 }
 
 fn caseGradient(features: []const Feature, coefficients: []const f64, gradient: []f64) struct { f64, []const Feature } {
@@ -149,8 +171,8 @@ pub fn main() !void {
     _ = args.skip();
 
     while (args.next()) |fname| {
-        std.debug.print("Loading EPD {s}:\n", .{fname});
-        var f = try std.fs.openFileAbsolute(fname, .{});
+        std.debug.print("Loading {s}:\n", .{fname});
+        var f = try std.fs.cwd().openFile(fname, .{});
         defer f.close();
         var stream = std.compress.gzip.decompressor(f.reader());
         var input = stream.reader();
@@ -158,11 +180,14 @@ pub fn main() !void {
         var count: usize = 0;
         var buffer: [1024]u8 = undefined;
         while (try input.readUntilDelimiterOrEof(&buffer, '\n')) |line| {
-            const case = try parseCase(line);
-            const features = featuresFromCase(&case);
+            count += 1;
+            const case = parseCase(line) orelse {
+                std.debug.print("malformed case detected near line {}: {s}\n", .{ count, line });
+                continue;
+            };
+            const features = featuresFromCase(&case) orelse continue;
             try dataset.addFeatureList(features);
             if (count & 0xfff == 0) std.debug.print("{}\r", .{count});
-            count += 1;
         }
         std.debug.print("{} [done]\n", .{count});
     }
@@ -180,7 +205,7 @@ pub fn main() !void {
     var best_coefficients = coefficients;
 
     var i: usize = 0;
-    while (best_epoch + 200 > i) : (i += 1) {
+    while (best_epoch + 500 > i) : (i += 1) {
         const mse = dataset.calcGradient(&gradient, &coefficients);
         std.debug.print("epoch {} mse {} time {} ms", .{ i, mse, timer.lap() / std.time.ns_per_ms });
         if (mse < best_mse) {
@@ -203,6 +228,8 @@ pub fn main() !void {
     }
 
     for (best_coefficients) |c| std.debug.print("{} ", .{c});
+    std.debug.print("\n", .{});
+    printPsts(&best_coefficients);
 }
 
 const std = @import("std");
@@ -211,3 +238,4 @@ const coord = @import("coord.zig");
 const eval = @import("eval.zig");
 const Color = @import("common.zig").Color;
 const Board = @import("Board.zig");
+const PieceType = @import("common.zig").PieceType;

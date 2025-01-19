@@ -1,4 +1,4 @@
-const bannou_version = "0.73";
+const bannou_version = "0.74";
 
 const TimeControl = struct {
     wtime: ?u64 = null,
@@ -23,7 +23,7 @@ const Uci = struct {
         };
         const safe_time_remaining = (@max(time_remaining, margin) - margin) * std.time.ns_per_ms; // nanoseconds
         const deadline = safe_time_remaining / movestogo; // nanoseconds
-        var info = search.TimeControl.init(.{ .soft_deadline = deadline / 2, .hard_deadline = safe_time_remaining / 2 });
+        var info = search.TimeControl.init(.{ .soft_time = deadline / 2, .hard_time = safe_time_remaining / 2 });
 
         var pv = line.Line{};
         _ = try search.go(&self.out, &g, &info, &pv);
