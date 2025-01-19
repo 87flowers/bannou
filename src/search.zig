@@ -7,9 +7,9 @@ pub fn Control(comptime config: struct {
     return struct {
         timer: std.time.Timer,
         nodes: u64,
-        time_limit: if (config.time) struct { soft_deadline: u64, hard_deadline: u64 } else void,
+        time_limit: if (config.time) struct { soft: u64, hard: u64 } else void,
         depth_limit: if (config.depth) struct { target_depth: i32 } else void,
-        nodes_limit: if (config.nodes) struct { target_nodes: i32 } else void,
+        nodes_limit: if (config.nodes) struct { soft: u64, hard: u64 } else void,
         stats: if (config.stats) struct {
             nodes: u64 = 0,
             qnodes: u64 = 0,
@@ -30,9 +30,9 @@ pub fn Control(comptime config: struct {
             return .{
                 .timer = std.time.Timer.start() catch @panic("timer unsupported on platform"),
                 .nodes = 0,
-                .time_limit = if (config.time) .{ .soft_deadline = args.soft_deadline, .hard_deadline = args.hard_deadline } else {},
+                .time_limit = if (config.time) .{ .soft = args.soft_time, .hard = args.hard_time } else {},
                 .depth_limit = if (config.depth) .{ .target_depth = args.target_depth } else {},
-                .nodes_limit = if (config.nodes) .{ .target_nodes = args.target_nodes } else {},
+                .nodes_limit = if (config.nodes) .{ .soft = args.soft_nodes, .hard = args.hard_nodes } else {},
                 .stats = if (config.stats) .{} else {},
             };
         }
@@ -55,15 +55,16 @@ pub fn Control(comptime config: struct {
 
         /// Returns true if we should terminate the search
         pub fn checkSoftTermination(self: *@This(), depth: i32) bool {
-            if (config.time and self.time_limit.soft_deadline <= self.timer.read()) return true;
+            if (config.time and self.time_limit.soft <= self.timer.read()) return true;
             if (config.depth and depth >= self.depth_limit.target_depth) return true;
-            if (config.nodes and self.nodes >= self.nodes_limit.target_nodes) return true;
+            if (config.nodes and self.nodes >= self.nodes_limit.soft) return true;
             return false;
         }
 
         /// Raises SearchError.EarlyTermination if we should terminate the search
         pub fn checkHardTermination(self: *@This(), comptime mode: SearchMode, depth: i32) SearchError!void {
-            if (config.time and mode == .normal and depth > 3 and self.time_limit.hard_deadline <= self.timer.read()) return SearchError.EarlyTermination;
+            if (config.time and mode == .normal and depth > 3 and self.time_limit.hard <= self.timer.read()) return SearchError.EarlyTermination;
+            if (config.nodes and self.nodes >= self.nodes_limit.hard) return SearchError.EarlyTermination;
         }
 
         pub fn trackTtPrune(self: *@This(), mode: SearchMode) void {
