@@ -1,4 +1,4 @@
-const max_history_value: i16 = std.math.maxInt(i16);
+const max_history_value: i16 = 1 << 14;
 
 board: Board,
 tt: TT,
