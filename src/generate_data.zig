@@ -116,7 +116,6 @@ pub fn main() !void {
             .draw => "1/2-1/2",
         };
         std.debug.print("{} {s} {}             \r", .{ game_count, result_str, position_count });
-        if (result == .draw) continue;
         for (history.slice()) |h| {
             try out.print("{} | {} {} {} {s}\n", .{
                 h.board,
