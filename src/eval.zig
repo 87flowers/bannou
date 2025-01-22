@@ -164,7 +164,7 @@ pub fn eval(game: *const Game) i14 {
         .white => score,
         .black => -score,
     };
-    score += tempo[0] * mg_phase + p_eg[1] * eg_phase;
+    score += tempo[0] * mg_phase + tempo[1] * eg_phase;
     score = @divTrunc(score, 24);
     return clampScore(score);
 }
