@@ -67,10 +67,12 @@ fn rescaleEval(cp: f64) f64 {
 const pst_index = 0;
 const pst_size = 6 << 7;
 const tempo_index = pst_index + pst_size;
-const tempo_size = 2;
-const coefficients_size = tempo_index + tempo_size;
+const tempo_size = 1;
+const bishop_pair_index = tempo_index + tempo_size;
+const bishop_pair_size = 2;
+const coefficients_size = bishop_pair_index + bishop_pair_size;
 test {
-    comptime assert(coefficients_size == pst_size + tempo_size);
+    comptime assert(coefficients_size == pst_size + tempo_size + bishop_pair_size);
 }
 
 fn featuresFromCase(case: *const Case) ?FeatureList {
@@ -80,6 +82,8 @@ fn featuresFromCase(case: *const Case) ?FeatureList {
 
     const mg_phase = phaseFromCase(case);
     const eg_phase = 1.0 - mg_phase;
+
+    var piece_count: [2][7]usize = @splat(@splat(0));
 
     for (0..32) |id| {
         const color = Color.fromId(@intCast(id));
@@ -94,6 +98,8 @@ fn featuresFromCase(case: *const Case) ?FeatureList {
             .black => -1,
         };
 
+        piece_count[@intFromEnum(color)][@intFromEnum(ptype)] += 1;
+
         assert(index < (6 << 7));
 
         features.add(.{ .index = pst_index + index + 0, .weight = mg_phase * sign });
@@ -107,7 +113,15 @@ fn featuresFromCase(case: *const Case) ?FeatureList {
         };
 
         features.add(.{ .index = tempo_index + 0, .weight = mg_phase * sign });
-        features.add(.{ .index = tempo_index + 1, .weight = eg_phase * sign });
+    }
+
+    {
+        for (0.., [2]f64{ 1, -1 }) |side, sign| {
+            if (piece_count[side][@intFromEnum(PieceType.b)] >= 2) {
+                features.add(.{ .index = bishop_pair_index + 0, .weight = mg_phase * sign });
+                features.add(.{ .index = bishop_pair_index + 1, .weight = eg_phase * sign });
+            }
+        }
     }
 
     return features;
@@ -120,16 +134,14 @@ pub fn printCoefficients(coefficients: []f64) void {
             for (0..64) |where| {
                 if (where % 8 == 0) std.debug.print("    ", .{});
                 const index = pst_index + (ptypei << 7) + (where << 1) + phasei;
-                std.debug.print("{}, ", .{@as(i16, @intFromFloat(coefficients[index]))});
+                std.debug.print("{}, ", .{@as(i32, @intFromFloat(@round(coefficients[index])))});
                 if (where % 8 == 7) std.debug.print("\n", .{});
             }
             std.debug.print("}};\n\n", .{});
         }
     }
     {
-        std.debug.print("const tempo = [2]i16{{ ", .{});
-        std.debug.print("{}, {}", .{ coefficients[tempo_index + 0], coefficients[tempo_index + 1] });
-        std.debug.print(" }};\n\n", .{});
+        std.debug.print("const tempo = {};\n\n", .{@as(i32, @intFromFloat(@round(coefficients[tempo_index])))});
     }
 }
 
@@ -231,7 +243,7 @@ pub fn main() !void {
     while (best_epoch + 500 > i) : (i += 1) {
         const mse = dataset.calcGradient(&gradient, &coefficients);
         std.debug.print("epoch {} mse {} time {} ms", .{ i, mse, timer.lap() / std.time.ns_per_ms });
-        if (mse < best_mse) {
+        if (mse < best_mse and i > 10) {
             best_mse = mse;
             best_epoch = i;
             best_coefficients = coefficients;
