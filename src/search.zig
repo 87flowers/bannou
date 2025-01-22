@@ -225,12 +225,18 @@ fn search(game: *Game, ctrl: anytype, pv: anytype, w: anytype, ply: u32, depth_a
                     // Do not return mate scores
                     return if (eval.isMateScore(null_score)) w.beta() else null_score;
                 }
+
                 // Null-move reduction
                 // This is the same as a normal search except:
                 // - With a "pruneable" flag set (the .nullmove mode)
                 // - Depth reduced by 1
                 const nmr_reduction = 1 + @divTrunc(depth, 6);
                 return search(game, ctrl, pv, w, ply, depth - nmr_reduction, .nullmove);
+            }
+
+            // Mate threat extension
+            if (eval.isMated(null_score)) {
+                depth += 1;
             }
         }
     }
