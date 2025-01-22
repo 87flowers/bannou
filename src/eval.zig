@@ -138,7 +138,7 @@ pub fn eval(game: *const Game) i14 {
     const mg_phase = phase(&game.board);
     const eg_phase = 24 - mg_phase;
 
-    var piece_count: [2][7]usize = @splat(@splat(0));
+    var piece_count: [2][7]usize = .{ .{0} ** 7 } ** 2;
     var score: i32 = 0;
 
     for (0..16) |id| {
