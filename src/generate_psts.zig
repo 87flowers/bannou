@@ -64,6 +64,15 @@ fn rescaleEval(cp: f64) f64 {
     return 2 * p - 1;
 }
 
+const pst_index = 0;
+const pst_size = 6 << 7;
+const tempo_index = pst_index + pst_size;
+const tempo_size = 2;
+const coefficients_size = tempo_index + tempo_size;
+test {
+    comptime assert(coefficients_size == pst_size + tempo_size);
+}
+
 fn featuresFromCase(case: *const Case) ?FeatureList {
     if (case.should_filter) return null;
 
@@ -87,25 +96,40 @@ fn featuresFromCase(case: *const Case) ?FeatureList {
 
         assert(index < (6 << 7));
 
-        features.add(.{ .index = index + 0, .weight = mg_phase * sign });
-        features.add(.{ .index = index + 1, .weight = eg_phase * sign });
+        features.add(.{ .index = pst_index + index + 0, .weight = mg_phase * sign });
+        features.add(.{ .index = pst_index + index + 1, .weight = eg_phase * sign });
+    }
+
+    {
+        const sign: f64 = switch (case.board.active_color) {
+            .white => 1,
+            .black => -1,
+        };
+
+        features.add(.{ .index = tempo_index + 0, .weight = mg_phase * sign });
+        features.add(.{ .index = tempo_index + 1, .weight = eg_phase * sign });
     }
 
     return features;
 }
 
-pub fn printPsts(coefficients: []f64) void {
+pub fn printCoefficients(coefficients: []f64) void {
     for ([_]PieceType{ .p, .n, .b, .r, .q, .k }, 0..) |ptype, ptypei| {
         for ([_][]const u8{ "mg", "eg" }, 0..) |phase, phasei| {
             std.debug.print("const {c}_{s} = [_]i16{{\n", .{ ptype.toChar(.black), phase });
             for (0..64) |where| {
                 if (where % 8 == 0) std.debug.print("    ", .{});
-                const index = (ptypei << 7) + (where << 1) + phasei;
+                const index = pst_index + (ptypei << 7) + (where << 1) + phasei;
                 std.debug.print("{}, ", .{@as(i16, @intFromFloat(coefficients[index]))});
                 if (where % 8 == 7) std.debug.print("\n", .{});
             }
             std.debug.print("}};\n\n", .{});
         }
+    }
+    {
+        std.debug.print("const tempo = [2]i16{{ ", .{});
+        std.debug.print("{}, {}", .{ coefficients[tempo_index + 0], coefficients[tempo_index + 1] });
+        std.debug.print(" }};\n\n", .{});
     }
 }
 
@@ -194,7 +218,6 @@ pub fn main() !void {
 
     var timer = try std.time.Timer.start();
 
-    const coefficients_size = 6 << 7;
     var coefficients = [1]f64{0} ** coefficients_size;
     var gradient = [1]f64{0} ** coefficients_size;
     var momentum = [1]f64{0} ** coefficients_size;
@@ -229,7 +252,7 @@ pub fn main() !void {
 
     for (best_coefficients) |c| std.debug.print("{} ", .{c});
     std.debug.print("\n", .{});
-    printPsts(&best_coefficients);
+    printCoefficients(&best_coefficients);
 }
 
 const std = @import("std");
