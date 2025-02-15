@@ -133,7 +133,7 @@ fn getHistoryPointers(self: *Game, m: Move) [3]*i16 {
     const proposed_move: usize = m.code.compressedPair();
     const prev_move: usize = self.prevMove().compressedPair();
     return .{
-        &self.pd_history[color * 6 * 64 + ptype * 64 + m.code.dest()],
+        &self.pd_history[color * 6 * 64 + ptype * 64 + m.code.compressedDest()],
         &self.sd_history[color * 64 * 64 + proposed_move],
         &self.counter_moves[color * 64 * 64 * 64 * 64 + prev_move * 64 * 64 + proposed_move],
     };
