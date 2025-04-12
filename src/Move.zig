@@ -54,7 +54,7 @@ pub inline fn getNewState(self: *const Move, state: State) State {
         .normal => return .{
             .castle = state.castle | self.srcBit() | self.destBit(),
             .enpassant = self.enpassant,
-            .no_capture_clock = state.no_capture_clock + 1,
+            .no_capture_clock = if (self.srcPtype() == .p) 0 else state.no_capture_clock + 1,
             .ply = state.ply + 1,
             .hash = state.hash ^
                 zhash.move ^
