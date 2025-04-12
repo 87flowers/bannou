@@ -1,4 +1,4 @@
-const bannou_version = "0.81";
+const bannou_version = "0.82";
 
 const TimeControl = struct {
     wtime: ?u64 = null,
